@@ -300,10 +300,11 @@ function render(){
   // 軸1: レース選定判定（打つ/見送り）
   var top=p[order[0]], gap=top-p[order[1]], b0=boats[order[0]], nm0=(order[0]+1)+(b0.name||'');
   var vc,vt,vs;
-  if(top>=0.60 && gap>=0.22){vc='v-good';vt='🟢 打ち候補';vs='本命 '+nm0+' が明確（勝率'+(top*100).toFixed(0)+'%・2番手と'+(gap*100).toFixed(0)+'pt差）。軸を絡めて厚く獲る。';}
-  else if(top>=0.48){vc='v-mid';vt='🟡 中庸';vs='本命はいるが盤石でない（'+nm0+' 勝率'+(top*100).toFixed(0)+'%）。妙味(実オッズ>分岐)が出た目だけ軽く。';}
-  else {vc='v-bad';vt='🔴 難解・見送り寄り';vs='軸がぐらつく（トップ勝率'+(top*100).toFixed(0)+'%の混戦）。明確な妙味が無ければ見送りが正解（見送りも成果）。';}
-  document.getElementById('verdict').innerHTML='<div class="verdict '+vc+'">'+vt+'<small>'+vs+'</small></div>';
+  var stake;
+  if(top>=0.60 && gap>=0.22){vc='v-good';vt='🟢 打ち候補';vs='本命 '+nm0+' が明確（勝率'+(top*100).toFixed(0)+'%・2番手と'+(gap*100).toFixed(0)+'pt差）。軸を絡めて厚く獲る。';stake='推奨：軸を絡めて<b>5〜8点／予算内で厚めOK</b>。';}
+  else if(top>=0.48){vc='v-mid';vt='🟡 中庸';vs='本命はいるが盤石でない（'+nm0+' 勝率'+(top*100).toFixed(0)+'%）。妙味(実オッズ>分岐)が出た目だけ軽く。';stake='推奨：<b>3点以下・軽く（妙味だけ）or 見送り</b>。広く張らない（9点ベタ張りはNG）。';}
+  else {vc='v-bad';vt='🔴 難解・見送り寄り';vs='軸がぐらつく（トップ勝率'+(top*100).toFixed(0)+'%の混戦）。明確な妙味が無ければ見送りが正解（見送りも成果）。';stake='推奨：<b>基本は見送り</b>。打つなら¥500の遊びで1〜2点まで。';}
+  document.getElementById('verdict').innerHTML='<div class="verdict '+vc+'">'+vt+'<small>'+vs+'</small><small style="color:var(--ink)">'+stake+'</small></div>';
   document.getElementById('out').style.display='';
   renderTri();
   document.getElementById('out2').style.display='';
