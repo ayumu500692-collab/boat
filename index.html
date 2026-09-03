@@ -122,6 +122,17 @@ small.hint{color:var(--mut);font-size:11px}
       <button class="mode active" data-m="value">⚖ 妙味</button>
       <button class="mode" data-m="ana">💥 大穴</button>
     </div>
+    <div class="grid2" style="margin:0 0 8px">
+      <label class="mini">🔎 絞り込み
+        <select id="npts">
+          <option value="3">3点</option>
+          <option value="5">5点</option>
+          <option value="8" selected>8点</option>
+          <option value="99">全部</option>
+        </select>
+      </label>
+      <span class="note" style="margin:0">点数を絞ると妙味判定・資金配分もこの点数で連動。</span>
+    </div>
     <div class="note" style="margin:0 0 8px">「分岐オッズ」＝1÷確率＝<b>買っていい最低倍率</b>。賭けサイトの実オッズがこれより高ければ買い（打ち込めばEVも自動計算）。<b class="plus">EV&gt;1=妙味</b> / <span class="minus">EV&lt;1=過剰人気</span>。</div>
     <div style="overflow-x:auto"><table class="tri"><thead><tr><th>買い目</th><th>確率</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>判定</th></tr></thead><tbody id="tri"></tbody></table></div>
     <div class="note" id="reco"></div>
@@ -310,7 +321,7 @@ function onOdds(e){
   else {evc.className='ev minus';jd.innerHTML='<span class="minus">過剰人気</span>';tr.classList.remove('mvym');}
 }
 // ===== 狙いモード（予想家の意見をアプリに反映）=====
-var MODE='value';
+var MODE='value', NPT=8; // NPT=表示点数(絞り込み)
 function renderTri(){
   if(!LAST) return;
   var all=trifecta(LAST.p), list, reco; // all は確率降順
@@ -325,6 +336,7 @@ function renderTri(){
     list=all.slice(10,26); // 本命の"次の層"＝妙味が出やすい中位
     reco='⚖<b>妙味モード</b>（確率屋レン・AIノヴァ）：本命の<b>次の中位層</b>＝妙味(実オッズ>分岐)が出やすい所。過剰人気は薄く、軸は絡める。';
   }
+  list=list.slice(0,NPT); // 絞り込み（点数）
   document.getElementById('tri').innerHTML=list.map(function(t){
     var be=1/t.prob;
     return '<tr data-p="'+t.prob+'"><td><b>'+fmtC(t.combo)+'</b></td><td>'+(t.prob*100).toFixed(2)+'%</td>'+
@@ -370,6 +382,7 @@ function allocate(){
 }
 document.getElementById('alloc').addEventListener('click',allocate);
 document.getElementById('water').addEventListener('change',function(){ if(LAST)render(); });
+document.getElementById('npts').addEventListener('change',function(){ NPT=+this.value||8; renderTri(); });
 
 /* ========== 公式データ自動取得（Boatrace Open API） ========== */
 var STADIUMS=["","桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲郡","常滑","津","三国","びわこ","住之江","尼崎","鳴門","丸亀","児島","宮島","徳山","下関","若松","芦屋","福岡","唐津","大村"];
