@@ -159,6 +159,7 @@ small.hint{color:var(--mut);font-size:11px}
     <div class="grid2" style="margin:0 0 8px">
       <label class="mini">🔎 絞り込み
         <select id="npts">
+          <option value="2">2点(超厳選)</option>
           <option value="3">3点</option>
           <option value="5">5点</option>
           <option value="8" selected>8点</option>
@@ -196,6 +197,7 @@ small.hint{color:var(--mut);font-size:11px}
 /* ===================== v2 数理モデル ===================== */
 var GRADE={A1:1.0,A2:0.78,B1:0.5,B2:0.28};
 var COURSE_BASE=[0.55,0.155,0.12,0.105,0.05,0.02]; // コース1..6 基礎勝率(概算)
+var PLACE_CB=[1.0,0.88,0.80,0.72,0.58,0.48];       // 2・3着のコース優位(1着ほど極端でない)
 // v2重み: 級別を下げ、実績(2連/当地3連)を主に
 var W={grade:0.12, nat:0.24, loc:0.16, loc3:0.14, motor:0.18, st:0.16};
 var K=1.3;         // コース×実力の効き(既定)
@@ -278,8 +280,8 @@ function winProbs(boats,cfg){
   var p=raw.map(function(x){return x/s;});
   // 温度スケーリング(較正): T>1で本命をならす / T<1で尖らせる
   if(T!==1.0){ var pt=p.map(function(x){return Math.pow(Math.max(x,1e-9),1/T);}); var st=pt.reduce(function(a,b){return a+b;},0); p=pt.map(function(x){return x/st;}); }
-  // 段階B: place重み place_str = 実力 ×(1+0.5·攻め力)  →2・3着の取りにいく力(spec §4B)
-  var pw=boats.map(function(b,i){return Math.max(0.02,str[i]*(1+0.5*km[i].atk));});
+  // 段階B: place重み = コース優位 × 実力 ×(1+0.4·攻め力)  →2・3着の取りにいく力(spec §4B)
+  var pw=boats.map(function(b,i){var cc=clamp((b.course||i+1)-1,0,5); return Math.max(0.02,PLACE_CB[cc]*str[i]*(1+0.4*km[i].atk));});
   var sw=pw.reduce(function(a,b){return a+b;},0);
   return {p:p,str:str,w:pw.map(function(x){return x/sw;}),
           atk:km.map(function(k){return k.atk;}),sasare:km.map(function(k){return k.sasare;})};
