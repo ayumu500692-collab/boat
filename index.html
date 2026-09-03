@@ -127,10 +127,10 @@ small.hint{color:var(--mut);font-size:11px}
     <h2>② 出走表（自動＋手修正）</h2>
     <div style="overflow-x:auto">
       <table id="inp"><thead><tr>
-        <th>コース</th><th>選手<span class="tag auto">自</span></th><th>級別</th><th>全国2連<span class="tag auto">自</span></th><th>当地2連<span class="tag auto">自</span></th><th>当地3連<span class="tag auto">自</span></th><th>M2連<span class="tag auto">自</span></th><th>平均ST<span class="tag auto">自</span></th><th>実測1着率<span class="tag man">手</span></th><th>展示T<span class="tag man">手</span></th>
+        <th>コース</th><th>選手<span class="tag auto">自</span></th><th>級別</th><th>全国2連<span class="tag auto">自</span></th><th>当地2連<span class="tag auto">自</span></th><th>当地3連<span class="tag auto">自</span></th><th>M2連<span class="tag auto">自</span></th><th>平均ST<span class="tag auto">自</span></th><th>実測1着率<span class="tag man">手</span></th><th>展示T<span class="tag man">手</span></th><th>決手%<span class="tag man">手</span></th>
       </tr></thead><tbody></tbody></table>
     </div>
-    <div class="note"><b>コース＝進入</b>（前づけがあれば書き換える＝v2の要）。<b>実測1着率</b>＝新概念データの「1コース1着率」等（本命の堅さを最も左右。任意）。展示T・実測は補正、実力(2連率)を覆さない。</div>
+    <div class="note"><b>コース＝進入</b>（前づけがあれば書き換える＝v2の要）。<b>実測1着率</b>＝「1コース1着率」等（本命の堅さを最も左右）。<b>決手%</b>＝決まり手データ（<b>1号艇＝差され率</b>／<b>2〜6号艇＝攻め率＝差し＋まくり＋まくり差し</b>）。空欄なら<b>ST・機力・コースから自動推定</b>。すべて任意・補正であり実力(2連率)は覆さない。</div>
     <button class="btn" id="calc">数値化して計算</button>
     <button class="btn ghost" id="demo" style="margin-top:8px">デモ：常滑11R(石倉型・実測1着率あり)</button>
   </div>
@@ -217,12 +217,30 @@ function waterCB(w){
   if(w==='mid')   return [0.52,0.155,0.125,0.11,0.06,0.03];
   return COURSE_BASE.slice();
 }
-// 段階A: 1着確率(コース支配 + 実測1着率ブレンド + 水面)
+// v3 決まり手: 1コース差され率・2〜6コース攻め力(差し/まくり)。手入力km%あれば優先、無ければ推定
+function kimarite(boats){
+  return boats.map(function(b,i){
+    var c=b.course||i+1;
+    var stq=clamp((0.21-(b.st||0.18))/0.09,0,1); // ST速い=1
+    var mq=clamp((b.motor||0)/50,0,1);            // 機力=1
+    if(c===1){
+      // 差され推定: ST遅い・機力低いほど逃げ崩れやすい
+      var sas=(b.km>0)?clamp(b.km/100,0,0.7):clamp(0.10+0.42*(1-stq)+0.30*(1-mq),0,0.6);
+      return {atk:0, sasare:sas};
+    }
+    // 攻め推定: カド(4)>センター(3)>(5)>(2)の地の利 × 機力 × ST
+    var geo=(c===4?0.30:c===3?0.24:c===5?0.16:c===2?0.14:0.10);
+    var atk=(b.km>0)?clamp(b.km/100,0,0.9):clamp(geo+0.34*mq+0.24*stq,0,0.85);
+    return {atk:atk, sasare:0};
+  });
+}
+// 段階A: 1着確率(コース支配 + 実測1着率ブレンド + 水面 + 差され割引) / 段階B用のplace重みも返す
 function winProbs(boats){
   var w=(document.getElementById('water')||{}).value||'calm';
   var cb=waterCB(w);
   var mBonus=w==='rough'?0.14:(w==='mid'?0.06:0); // 荒れ×好機力の相互作用
   var adj=tenjiAdj(boats);
+  var km=kimarite(boats);
   var str=boats.map(function(b,i){
     var s=Math.max(0.05,strength(b)+adj[i]);
     if(mBonus>0) s*=(1+mBonus*clamp((b.motor-35)/20,0,1)); // M35超で加点、荒れほど大
@@ -234,40 +252,47 @@ function winProbs(boats){
     return cb[course]*Math.pow(str[i]/mean,K);
   });
   var sumBase=base.reduce(function(a,b){return a+b;},0);
-  // 実測1着率(cwin)があれば半分ブレンド
+  // 実測1着率(cwin)があれば半分ブレンド → 1コースは差され率で割引(spec §4)
   var raw=boats.map(function(b,i){
     var pb=base[i]/sumBase;
-    if(b.cwin&&b.cwin>0){ return CWIN_BLEND*(b.cwin/100)+(1-CWIN_BLEND)*pb; }
-    return pb;
+    var v=(b.cwin&&b.cwin>0)?(CWIN_BLEND*(b.cwin/100)+(1-CWIN_BLEND)*pb):pb;
+    if((b.course||i+1)===1) v*=(1-0.5*km[i].sasare);
+    return v;
   });
   var s=raw.reduce(function(a,b){return a+b;},0);
-  return {p:raw.map(function(x){return x/s;}),str:str};
+  // 段階B: place重み place_str = 実力 ×(1+0.5·攻め力)  →2・3着の取りにいく力(spec §4B)
+  var pw=boats.map(function(b,i){return Math.max(0.02,str[i]*(1+0.5*km[i].atk));});
+  var sw=pw.reduce(function(a,b){return a+b;},0);
+  return {p:raw.map(function(x){return x/s;}),str:str,w:pw.map(function(x){return x/sw;}),
+          atk:km.map(function(k){return k.atk;}),sasare:km.map(function(k){return k.sasare;})};
 }
-function trifecta(p){
-  var n=p.length,res=[];
+// 3連単: 1着=p, 2・3着=place重みw(spec §4B)。wは省略時pで従来動作
+function trifecta(p,w){
+  w=w||p; var n=p.length,res=[],W=w.reduce(function(a,b){return a+b;},0);
   for(var a=0;a<n;a++)for(var b=0;b<n;b++)for(var c=0;c<n;c++){
     if(a===b||a===c||b===c)continue;
-    var pa=p[a], pb=p[b]/(1-p[a]), pc=p[c]/(1-p[a]-p[b]);
-    res.push({combo:[a+1,b+1,c+1],prob:pa*pb*pc});
+    var w2=W-w[a], w3=w2-w[b]; if(w2<=0||w3<=0)continue;
+    res.push({combo:[a+1,b+1,c+1],prob:p[a]*(w[b]/w2)*(w[c]/w3)});
   }
   return res.sort(function(x,y){return y.prob-x.prob;});
 }
-function placeRates(p){
-  var n=p.length,top2=new Array(n).fill(0),top3=new Array(n).fill(0);
+function placeRates(p,w){
+  w=w||p; var n=p.length,W=w.reduce(function(a,b){return a+b;},0),top2=new Array(n).fill(0),top3=new Array(n).fill(0);
   for(var i=0;i<n;i++){
     var t2=p[i];
-    for(var j=0;j<n;j++){if(j!==i)t2+=p[j]*(p[i]/(1-p[j]));}
-    top2[i]=t2; var t3=t2;
-    for(var j2=0;j2<n;j2++)for(var k=0;k<n;k++){
-      if(j2===i||k===i||j2===k)continue;
-      t3+=p[j2]*(p[k]/(1-p[j2]))*(p[i]/(1-p[j2]-p[k]));
+    for(var a=0;a<n;a++){ if(a===i)continue; var w2=W-w[a]; if(w2>0)t2+=p[a]*(w[i]/w2); }
+    var t3=t2;
+    for(var a2=0;a2<n;a2++)for(var b2=0;b2<n;b2++){
+      if(a2===i||b2===i||a2===b2)continue;
+      var w2b=W-w[a2], w3b=w2b-w[b2]; if(w2b<=0||w3b<=0)continue;
+      t3+=p[a2]*(w[b2]/w2b)*(w[i]/w3b);
     }
-    top3[i]=t3;
+    top2[i]=t2; top3[i]=t3;
   }
   return {top2:top2,top3:top3};
 }
 // 各艇の"なぜ"を数値から自動生成（根拠タグ）
-function reasons(b){
+function reasons(b,km){
   var r=[], c=b.course||0;
   if(b.cwin>=65) r.push('実測1着率'+b.cwin+'%＝逃げ鉄板級');
   else if(c===1 && b.cwin>0 && b.cwin<55) r.push('1コースだが1着率'+b.cwin+'%＝逃げ不安');
@@ -279,6 +304,10 @@ function reasons(b){
   else if(b.motor>0 && b.motor<=18) r.push('M'+Number(b.motor).toFixed(0)+'%＝機力難');
   if(b.st>0 && b.st<=0.14) r.push('ST'+Number(b.st).toFixed(2)+'＝速い');
   else if(b.st>=0.19) r.push('ST'+Number(b.st).toFixed(2)+'＝遅め');
+  if(km){
+    if(c===1 && km.sasare>=0.32) r.push('差され率'+(km.sasare*100).toFixed(0)+'%'+(b.km>0?'':'(推定)')+'＝逃げ崩れ注意');
+    else if(c>=3 && km.atk>=0.52) r.push('攻め力'+(km.atk*100).toFixed(0)+'%'+(b.km>0?'':'(推定)')+'＝差し/まくりの脅威');
+  }
   if(c===1) r.push('1コース＝逃げ本線');
   else if(c>=4 && b.motor>=40) r.push('外枠×好機力＝一撃の目');
   if(!r.length) r.push(b.grade+'・目立った強調点なし');
@@ -299,7 +328,8 @@ for(var i=0;i<6;i++){
     '<td><input type="number" class="motor" step="0.01"></td>'+
     '<td><input type="number" class="st" step="0.01" placeholder="0.15"></td>'+
     '<td><input type="number" class="cwin" step="0.1" placeholder="任意"></td>'+
-    '<td><input type="number" class="tenji" step="0.01" placeholder="任意"></td>';
+    '<td><input type="number" class="tenji" step="0.01" placeholder="任意"></td>'+
+    '<td><input type="number" class="km" step="0.1" placeholder="任意"></td>';
   TB.appendChild(tr);
 }
 function readBoats(){
@@ -307,20 +337,20 @@ function readBoats(){
     var q=function(s){return tr.querySelector(s);};
     return {course:+q('.course').value||0,name:q('.name').value||'',grade:q('.grade').value,nat:+q('.nat').value||0,
       loc:+q('.loc').value||0,loc3:+q('.loc3').value||0,motor:+q('.motor').value||0,
-      st:+q('.st').value||0.18,cwin:+q('.cwin').value||0,tenji:+q('.tenji').value||0};
+      st:+q('.st').value||0.18,cwin:+q('.cwin').value||0,tenji:+q('.tenji').value||0,km:+q('.km').value||0};
   });
 }
 function fmtC(c){return c.join('-');}
 var LAST=null;
 function render(){
   var boats=readBoats();
-  var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p};
-  var pr=placeRates(p);
+  var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p,w:wp.w,str:wp.str,atk:wp.atk,sasare:wp.sasare};
+  var pr=placeRates(p,wp.w);
   var host=document.getElementById('probs');
   var order=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
   var ROLE=['◎本命','○対抗','▲単穴','△','△','消'];
   host.innerHTML=order.map(function(i,idx){
-    var b=boats[i], nm=b.name||('艇'+(i+1)), rs=reasons(b);
+    var b=boats[i], nm=b.name||('艇'+(i+1)), rs=reasons(b,{atk:wp.atk[i],sasare:wp.sasare[i]});
     return '<div class="pl">'+
       '<div class="row"><span class="wk '+COL[i]+'">'+(i+1)+'</span>'+
       '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+nm+'</b> <span class="tag">'+b.grade+(b.cwin?'★':'')+'</span> <span class="role">'+ROLE[idx]+'</span></span>'+
@@ -352,7 +382,7 @@ function render(){
 // ===== 予想部隊 11人の見立て（同じ数字を別angleで斬る）=====
 function renderParade(){
   if(!LAST) return;
-  var boats=LAST.boats, p=LAST.p, pr=placeRates(p), n=boats.length, ix=boats.map(function(b,i){return i;});
+  var boats=LAST.boats, p=LAST.p, w=LAST.w||p, atk=LAST.atk||[], sasare=LAST.sasare||[], pr=placeRates(p,w), n=boats.length, ix=boats.map(function(b,i){return i;});
   var ord=ix.slice().sort(function(a,b){return p[b]-p[a];});
   var nm=function(i){return (i+1)+(boats[i].name||'艇'+(i+1));};
   var cof=function(i){return boats[i].course||i+1;};
@@ -362,7 +392,8 @@ function renderParade(){
   var maxMotor=ix.slice().sort(function(a,b){return (boats[b].motor||0)-(boats[a].motor||0);})[0];
   var maxLoc3=ix.slice().sort(function(a,b){return l3(b)-l3(a);})[0];
   var outer=ix.filter(function(i){return cof(i)>=3;});
-  var anaHead=outer.length?outer.slice().sort(function(a,b){return (strength(boats[b])+(boats[b].motor||0)/200)-(strength(boats[a])+(boats[a].motor||0)/200);})[0]:ord[1];
+  // 穴頭＝外枠で"攻め力"最大（決まり手を反映）
+  var anaHead=outer.length?outer.slice().sort(function(a,b){return ((atk[b]||0)+strength(boats[b])/2)-((atk[a]||0)+strength(boats[a])/2);})[0]:ord[1];
   var tj=boats.map(function(b){return b.tenji||0;}), hasTenji=tj.filter(function(v){return v>0;}).length>=3;
   var fastTj=hasTenji?ix.filter(function(i){return boats[i].tenji>0;}).sort(function(a,b){return boats[a].tenji-boats[b].tenji;})[0]:-1;
   var mvym=[], oddsCount=0;
@@ -376,8 +407,8 @@ function renderParade(){
   var S=[]; // {ic,nm,rl,op,hush}
   S.push({ic:'🅰',nm:'鉄板 剛',rl:'本命・イン逃げ',hush:pc1<0.42,
     op:'◎<span class="pk">'+nm(c1)+'</span> 1コース勝率'+(pc1*100).toFixed(0)+'%'+(boats[c1].cwin?'・実測1着率'+boats[c1].cwin+'%':'')+'。'+(pc1>=0.55?'イン飛ばす理由なし＝ここで獲る':pc1>=0.42?'1は取りたいが盤石でない。相手は2・3コース':'1が弱い＝本命党でも手控え')});
-  S.push({ic:'🅱',nm:'荒波 テツ',rl:'穴・まくり差し',hush:quality==='堅い'&&(boats[anaHead].motor||0)<38,
-    op:'頭は<span class="pk">'+nm(anaHead)+'</span>（'+cof(anaHead)+'コース M'+(boats[anaHead].motor||0).toFixed(0)+'%）。1号艇の差されを突く。1は2-3着へ飛ばす'});
+  S.push({ic:'🅱',nm:'荒波 テツ',rl:'穴・まくり差し',hush:quality==='堅い'&&(atk[anaHead]||0)<0.45,
+    op:'頭は<span class="pk">'+nm(anaHead)+'</span>（'+cof(anaHead)+'コース M'+(boats[anaHead].motor||0).toFixed(0)+'%・攻め力'+((atk[anaHead]||0)*100).toFixed(0)+'%）。1号艇の差され'+((sasare[c1]||0)*100).toFixed(0)+'%を突く。1は2-3着へ'});
   S.push({ic:'🅲',nm:'確率屋 レン',rl:'期待値',hush:!hasOdds,
     op:hasOdds?(mvym.length?'妙味'+mvym.length+'点。最有力 <span class="pk">'+mvym[0].c+'</span>（EV'+mvym[0].ev.toFixed(2)+'）に寄せる':'入力オッズにEV>1なし＝<b>買う理由なし・見送り</b>'):'オッズ未入力＝判断保留。安い本命は切る。⑤で実オッズを入れて'});
   S.push({ic:'🅳',nm:'時計 ハヤト',rl:'展示・直前',hush:!hasTenji,
@@ -406,14 +437,14 @@ function renderParade(){
   else if(quality==='中庸') call='<b>割れ気味。</b>妙味目だけ軽く（'+meivi+'）、無ければ見送り。軸('+nm(ord[0])+')は後付けで動かさない。3点以下。';
   else call='<b>難解＝各家の軸がバラけ。見送りが最善。</b>触るなら'+nm(ord[0])+'-'+nm(ord[1])+'流しを¥500で1〜2点。';
   // ===== 最高顧問（ベテランプロ）銭亀 源蔵＝統括の上・最終ジャッジ =====
-  var dangerC1=(c1===ord[0])&&(((boats[c1].motor||0)>0&&(boats[c1].motor||0)<32)||((boats[c1].st||0)>=0.18)||(boats[c1].cwin&&boats[c1].cwin<52)||maegumi);
+  var dangerC1=(c1===ord[0])&&(((boats[c1].motor||0)>0&&(boats[c1].motor||0)<32)||((boats[c1].st||0)>=0.18)||(boats[c1].cwin&&boats[c1].cwin<52)||(sasare[c1]||0)>=0.38||maegumi);
   var bClass,bJudge,bWord;
   if(quality==='難解'&&!(hasOdds&&mvym.length)){
     bClass='b-stop'; bJudge='待った（見送り）';
     bWord='40年やって分かる。こういう混戦で妙味も無いレースは、触った時点で負けや。'+(maegumi?'進入も乱れとる。':'')+'今日は<b>見送りが一番の勝ち</b>。金は次に取っとけ。';
   }else if(dangerC1){
     bClass='b-warn'; bJudge='条件付き（本命に疑い）';
-    bWord='この1号艇（'+nm(c1)+'）、人気ほど信用できん。'+(((boats[c1].motor||0)>0&&(boats[c1].motor||0)<32)?'モーターが噴いとらん。':'')+(((boats[c1].st||0)>=0.18)?'ST遅い＝叩かれる。':'')+(maegumi?'前づけで枠なりが崩れとる。':'')+'頭一本は危険や。<b>2着付けに逃がすか、'+nm(anaHead)+'の一撃も一枚買え</b>。1頭固定は必ず保険。';
+    bWord='この1号艇（'+nm(c1)+'）、人気ほど信用できん。'+(((boats[c1].motor||0)>0&&(boats[c1].motor||0)<32)?'モーターが噴いとらん。':'')+(((boats[c1].st||0)>=0.18)?'ST遅い＝叩かれる。':'')+((sasare[c1]||0)>=0.38?'差され率'+((sasare[c1])*100).toFixed(0)+'%'+(boats[c1].km>0?'':'(推定)')+'＝逃げ崩れの目。':'')+(maegumi?'前づけで枠なりが崩れとる。':'')+'頭一本は危険や。<b>2着付けに逃がすか、'+nm(anaHead)+'の一撃も一枚買え</b>。1頭固定は必ず保険。';
   }else if(quality==='堅い'&&c1===ord[0]){
     bClass='b-go'; bJudge='GO（本命勝負）';
     bWord='これは素直でええ。'+nm(c1)+'から獲れる。ただしベテランほど欲張らん——<b>点数は絞って、保険を1枚</b>。転覆だけが怖い。';
@@ -449,7 +480,7 @@ function onOdds(e){
 var MODE='value', NPT=8; // NPT=表示点数(絞り込み)
 function renderTri(){
   if(!LAST) return;
-  var all=trifecta(LAST.p), list, reco; // all は確率降順
+  var all=trifecta(LAST.p, LAST.w), list, reco; // all は確率降順(2・3着は攻め力反映)
   if(MODE==='honmei'){
     list=all.slice(0,10); // 最上位＝堅い目
     reco='🎯<b>本命モード</b>（鉄板剛・複勝ナオ・回収ジン）：確率<b>最上位＝堅い目</b>で的中率狙い。1着固定＋3着広め。';
@@ -513,14 +544,14 @@ document.getElementById('npts').addEventListener('change',function(){ NPT=+this.
 function nagashi(){
   var out=document.getElementById('nagashiout');
   if(!LAST){out.textContent='先に「数値化して計算」してください。';return;}
-  var p=LAST.p, boats=LAST.boats;
+  var p=LAST.p, w=LAST.w||p, boats=LAST.boats, W=w.reduce(function(s,x){return s+x;},0);
   var ord=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
   var a=ord[0], b=ord[1], others=ord.slice(2);
   var nm=function(i){return (i+1)+(boats[i].name||'');};
   var rows=[];
   others.forEach(function(c){
-    rows.push({combo:[a+1,b+1,c+1],prob:p[a]*(p[b]/(1-p[a]))*(p[c]/(1-p[a]-p[b]))});
-    rows.push({combo:[b+1,a+1,c+1],prob:p[b]*(p[a]/(1-p[b]))*(p[c]/(1-p[b]-p[a]))});
+    rows.push({combo:[a+1,b+1,c+1],prob:p[a]*(w[b]/(W-w[a]))*(w[c]/(W-w[a]-w[b]))});
+    rows.push({combo:[b+1,a+1,c+1],prob:p[b]*(w[a]/(W-w[b]))*(w[c]/(W-w[b]-w[a]))});
   });
   rows.sort(function(x,y){return (1/y.prob)-(1/x.prob);}); // 高配当順
   out.innerHTML='<b>軸2艇＝'+nm(a)+'・'+nm(b)+'（実力ワンツー・頭は動かさない）</b><br>3着を残り4艇に流す（人気薄ほど高配当＝妙味の源泉）：<br>'+
