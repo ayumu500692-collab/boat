@@ -161,6 +161,15 @@ small.hint{color:var(--mut);font-size:11px}
     <div style="overflow-x:auto"><table class="tri"><thead><tr><th>段</th><th>買い目</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>¥配分</th></tr></thead><tbody id="ftri"></tbody></table></div>
     <div class="note" id="fnote"></div>
     <div class="note">実オッズを入れると<b>EV≥1.1(妙味)だけに絞って¥配分</b>。妙味ゼロなら見送り。下の「予想部隊」は根拠（見なくてもOK）。</div>
+    <button class="btn ghost" id="mknote" style="margin-top:10px">📝 note / X の下書きを作る（免責つき）</button>
+    <div id="noteout" hidden style="margin-top:8px">
+      <div class="note" style="margin:0 0 4px">▼ note本文（コピペ→「【ここから有料】」の位置で有料設定）</div>
+      <textarea id="notetext" readonly style="width:100%;height:210px;font-size:12px;line-height:1.5"></textarea>
+      <button class="btn ghost" id="copynote" style="margin-top:6px">note本文をコピー</button>
+      <div class="note" style="margin:10px 0 4px">▼ X告知（集客用・無料で投稿。noteのリンクを添えて）</div>
+      <textarea id="xtext" readonly style="width:100%;height:120px;font-size:12px;line-height:1.5"></textarea>
+      <button class="btn ghost" id="copyx" style="margin-top:6px">X告知をコピー</button>
+    </div>
   </div>
 
   <div class="card" id="outp" style="display:none">
@@ -545,9 +554,53 @@ function renderParade(){
     '<div class="ln"><b>穴線：</b>'+nm(anaHead)+' 頭（テツ・リク）'+((boats[anaHead].motor||0)>=42?'＝機力'+(boats[anaHead].motor||0).toFixed(0)+'%で一発あり':'＝機力平凡で薄く')+'</div>'+
     '<div class="ln" style="margin-top:5px;padding-top:5px;border-top:1px solid var(--line)"><b>▶ まとめ：</b>'+call+'</div></div>';
   document.getElementById('desk').innerHTML=bossBox+deskBox;
+  NOTEDATA={quality:quality, deskCall:stripTags(call), bossJudge:bJudge, bossWord:stripTags(bWord)};
 }
 document.getElementById('calc').addEventListener('click',render);
 document.getElementById('water').addEventListener('change',function(){ if(LAST)render(); });
+
+// ===== 📝 note / X 下書き生成（免責つき・独自ツールの分析を売る形）=====
+var NOTEDATA={};
+function stripTags(s){return (s||'').replace(/<[^>]+>/g,'');}
+function copyTA(id,btn){
+  var ta=document.getElementById(id); ta.focus(); ta.select();
+  var ok=false; try{document.execCommand('copy');ok=true;}catch(e){}
+  if(navigator.clipboard){try{navigator.clipboard.writeText(ta.value);ok=true;}catch(e){}}
+  if(btn){var t=btn.textContent; btn.textContent='コピーしました✓'; setTimeout(function(){btn.textContent=t;},1500);}
+}
+function renderNote(){
+  if(!LAST){return;}
+  var f=pickFinal(), boats=LAST.boats, nm=function(i){return (i+1)+' '+(boats[i].name||('艇'+(i+1)));};
+  var jcd=+((document.getElementById('jcd')||{}).value)||0, rno=(document.getElementById('rno')||{}).value||'';
+  var venue=((typeof STADIUMS!=='undefined'&&STADIUMS[jcd])?STADIUMS[jcd]:'')+' '+rno+'R';
+  var p=LAST.p, ord=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
+  var top=p[ord[0]], gap=top-p[ord[1]];
+  var q=(top>=0.60&&gap>=0.22)?'🟢 堅い':(top>=0.48?'🟡 中庸':'🔴 難解');
+  var lines=[];
+  Array.prototype.forEach.call(document.querySelectorAll('#ftri tr'),function(tr){
+    var o=FINPTS[+tr.getAttribute('data-i')]; if(!o)return;
+    var od=+tr.querySelector('.fodds').value||0, yen=tr.querySelector('.fyen').textContent;
+    var s='・'+o.combo.map(function(x){return x+1;}).join('-')+'（'+o.role+'）分岐'+o.be.toFixed(1)+'倍';
+    if(od>0)s+=' / 実'+od.toFixed(1)+' EV'+(od*o.prob).toFixed(2);
+    if(yen&&yen!=='–')s+=' / '+yen;
+    lines.push(s);
+  });
+  var disc='※本予想は独自の数値化ツールによる分析であり、的中や利益を保証するものではありません。控除率25%は覆せません。公営競技は20歳以上・余剰資金の範囲で。負けを取り返そうとしないこと。最終的な購入判断はご自身の責任で。';
+  var note='【'+venue+' 数値予想】独自ツール発\n\n'+
+    '▼レース質：'+q+'（本命勝率'+(top*100).toFixed(0)+'%）\n\n'+
+    '▼予想印\n◎本命　'+nm(f.honmei)+'（勝率'+(top*100).toFixed(0)+'%）\n○中堅　'+nm(f.o1)+'・'+nm(f.o2)+'\n▲穴　　'+nm(f.ana)+'\n\n'+
+    '────────────\n【ここから有料】\n\n'+
+    '▼買い目（◎→○→穴）\n'+(lines.length?lines.join('\n'):'（アプリで実オッズを入れると、EV≥1.1の妙味目と資金配分がここに入ります）')+'\n\n'+
+    '▼結論\n'+(NOTEDATA.deskCall||'')+'\n最高顧問の判断：'+(NOTEDATA.bossJudge||'')+'\n'+(NOTEDATA.bossWord||'')+'\n\n'+
+    '────────────\n'+disc;
+  document.getElementById('notetext').value=note;
+  var xt='【'+venue+'】独自ツールの数値予想🚤\n◎'+nm(f.honmei)+' ／ ○'+nm(f.o1)+'・'+nm(f.o2)+' ／ ▲'+nm(f.ana)+'\nレース質：'+q+'\n買い目・EV・資金配分と根拠はnoteで👇\n※的中保証なし・20歳以上・余剰資金で\n#競艇 #ボートレース #数値予想';
+  document.getElementById('xtext').value=xt;
+  document.getElementById('noteout').hidden=false;
+}
+document.getElementById('mknote').addEventListener('click',renderNote);
+document.getElementById('copynote').addEventListener('click',function(){copyTA('notetext',this);});
+document.getElementById('copyx').addEventListener('click',function(){copyTA('xtext',this);});
 
 // ===== 本日の厳選レース（全場スキャン→🟢打ち候補をピック）=====
 var DAYRACES=[];
