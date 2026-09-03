@@ -170,47 +170,18 @@ small.hint{color:var(--mut);font-size:11px}
     <div id="desk" style="margin-top:10px"></div>
   </div>
 
-  <div class="card" id="out2" style="display:none">
-    <h2>⑥ 3連単 全確率表（詳細・任意） <span class="tag man">オッズ手入力</span></h2>
-    <div id="modes">
-      <button class="mode" data-m="honmei">🎯 本命</button>
-      <button class="mode active" data-m="value">⚖ 妙味</button>
-      <button class="mode" data-m="ana">💥 大穴</button>
-    </div>
-    <div class="grid2" style="margin:0 0 8px">
-      <label class="mini">🔎 絞り込み
-        <select id="npts">
-          <option value="2">2点(超厳選)</option>
-          <option value="3">3点</option>
-          <option value="5">5点</option>
-          <option value="8" selected>8点</option>
-          <option value="99">全部</option>
-        </select>
-      </label>
-      <span class="note" style="margin:0">点数を絞ると妙味判定・資金配分もこの点数で連動。</span>
-    </div>
-    <div class="note" style="margin:0 0 8px">「分岐オッズ」＝1÷確率＝<b>買っていい最低倍率</b>。賭けサイトの実オッズがこれより高ければ買い（打ち込めばEVも自動計算）。<b class="plus">EV&gt;1=妙味</b> / <span class="minus">EV&lt;1=過剰人気</span>。</div>
-    <div style="overflow-x:auto"><table class="tri"><thead><tr><th>買い目</th><th>確率</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>判定</th></tr></thead><tbody id="tri"></tbody></table></div>
-    <div class="note" id="reco"></div>
-    <button class="btn ghost" id="nagashi" style="margin-top:10px">🎯 軸2艇→3着流し（頭を動かさず配当を稼ぐ）</button>
-    <div id="nagashiout" class="note" style="margin-top:8px"></div>
-    <div class="grid2" style="margin:10px 0 0;padding-top:10px;border-top:1px solid var(--line)">
-      <label class="mini">💰 予算¥ <input id="budget" type="number" value="3000" step="500" style="width:88px"></label>
-      <button class="btn" id="alloc" style="width:auto;margin:0;padding:8px 16px">資金配分を提案</button>
-    </div>
-    <div class="note" id="allocout" style="margin-top:8px">実オッズを入れてから「資金配分を提案」→ 妙味(EV&gt;1)の目に予算をエッジ比例で配分します。</div>
-  </div>
-
-  <div class="card">
-    <h2>🔮 精度アップ：自己採点＆自動較正 <span class="tag">実結果で検証</span></h2>
-    <div class="note" style="margin:0 0 8px">公営データ配信の<b>過去の実結果</b>でモデルを採点し、<b>「うちの予想が実際どれだけ当たっているか」</b>を可視化。ズレていれば<b>K（コース×実力の効き）とT（自信の強さ）を自動較正</b>して補正します。※必勝法ではなく、<b>自信の較正</b>（過信/過小を直す）。ライブ版で動作。</div>
+  <details class="card" style="padding:0">
+    <summary style="padding:14px;cursor:pointer;font-weight:700;font-size:15px;list-style:none">🔮 精度アップ：自己採点＆自動較正 <span class="tag">実結果で検証・普段は閉じたままでOK</span></summary>
+    <div style="padding:0 14px 14px">
+    <div class="note" style="margin:0 0 8px">公営データ配信の<b>過去の実結果</b>でモデルを採点し、<b>「うちの予想が実際どれだけ当たっているか」</b>を可視化。ズレていれば<b>K・T を自動較正</b>して補正します。※必勝法ではなく<b>自信の較正</b>。ライブ版で動作・年に数回で十分。</div>
     <div class="grid2" style="margin:0 0 8px">
       <label class="mini">検証日数 <select id="btdays"><option value="3">3日</option><option value="7" selected>7日</option><option value="14">14日</option></select></label>
       <button class="btn" id="backtest" style="width:auto;margin:0;padding:8px 16px">過去をバックテスト</button>
     </div>
     <div id="btout" class="note"></div>
     <div class="note" style="margin-top:8px">現在の較正：<b><span id="cfgnow"></span></b> <button class="btn ghost" id="cfgreset" style="width:auto;margin:0;padding:4px 10px;font-size:12px">既定に戻す</button></div>
-  </div>
+    </div>
+  </details>
 
   <div class="foot">v2モデル：級別(重み小)＋全国/当地2連・<b>当地3連</b>・モーター・STを数値化→実力指数→コース基礎勝率×<b>実測1着率ブレンド</b>→Harville法で3連単→<b>実オッズと突合して妙味</b>。前づけは進入コース欄で反映。<br>公営競技・20歳未満禁止／余剰資金で・負けを追わない・見送りも成果。</div>
 </main>
@@ -417,8 +388,6 @@ function render(){
   document.getElementById('outf').style.display='';
   renderParade();
   document.getElementById('outp').style.display='';
-  renderTri();
-  document.getElementById('out2').style.display='';
   window.scrollTo({top:document.getElementById('out').offsetTop-10,behavior:'smooth'});
 }
 
@@ -486,6 +455,7 @@ function allocFinal(){
   items.forEach(function(it){if(fund.indexOf(it)<0)it.yen=0;});
   var total=0; items.forEach(function(it){it.tr.querySelector('.fyen').textContent=it.yen?('¥'+it.yen):'–'; total+=it.yen||0;});
   document.getElementById('fnote').innerHTML=(hasOdds?'妙味'+fund.length+'点に配分。':'※オッズ未入力→確率で仮配分。')+' 計¥'+total+'（逃げ'+Math.round(bn/(budget||1)*100)+'：飛び'+Math.round(bt/(budget||1)*100)+'）。<b>取り返しの増額は禁止。</b>';
+  if(LAST) renderParade(); // ④のオッズでレン/ケイ/デスクの見立ても更新
 }
 document.getElementById('fpts').addEventListener('change',renderFinal);
 document.getElementById('ftri').addEventListener('input',function(e){ if(e.target.classList.contains('fodds'))allocFinal(); });
@@ -509,9 +479,9 @@ function renderParade(){
   var tj=boats.map(function(b){return b.tenji||0;}), hasTenji=tj.filter(function(v){return v>0;}).length>=3;
   var fastTj=hasTenji?ix.filter(function(i){return boats[i].tenji>0;}).sort(function(a,b){return boats[a].tenji-boats[b].tenji;})[0]:-1;
   var mvym=[], oddsCount=0;
-  Array.prototype.forEach.call(document.querySelectorAll('#tri tr'),function(tr){
-    var oi=tr.querySelector('.odds'), od=oi?(+oi.value||0):0, prob=+tr.getAttribute('data-p')||0;
-    if(od>0){oddsCount++; var ev=od*prob; if(ev>=1.1) mvym.push({c:tr.querySelector('b').textContent,ev:ev,od:od});}
+  Array.prototype.forEach.call(document.querySelectorAll('#ftri tr'),function(tr){
+    var oi=tr.querySelector('.fodds'), od=oi?(+oi.value||0):0, fp=FINPTS[+tr.getAttribute('data-i')], prob=fp?fp.prob:0;
+    if(od>0){oddsCount++; var ev=od*prob; if(ev>=1.1&&fp) mvym.push({c:fp.combo.map(function(x){return x+1;}).join('-'),ev:ev,od:od});}
   });
   mvym.sort(function(a,b){return b.ev-a.ev;});
   var hasOdds=oddsCount>0, top=p[ord[0]], gap=top-p[ord[1]], pc1=p[c1];
@@ -576,101 +546,8 @@ function renderParade(){
     '<div class="ln" style="margin-top:5px;padding-top:5px;border-top:1px solid var(--line)"><b>▶ まとめ：</b>'+call+'</div></div>';
   document.getElementById('desk').innerHTML=bossBox+deskBox;
 }
-function onOdds(e){
-  if(!e.target.classList.contains('odds'))return;
-  var tr=e.target.closest('tr'), prob=+tr.getAttribute('data-p'), odds=+e.target.value||0;
-  var ev=odds*prob;
-  var evc=tr.querySelector('.ev'), jd=tr.querySelector('.jd');
-  if(!odds){evc.textContent='–';jd.textContent='オッズ入力';tr.classList.remove('mvym');return;}
-  evc.textContent=ev.toFixed(2);
-  if(ev>=1.1){evc.className='ev plus';jd.innerHTML='<span class="plus">◎妙味(買い)</span>';tr.classList.add('mvym');}
-  else if(ev>=0.95){evc.className='ev';jd.textContent='ほぼフェア';tr.classList.remove('mvym');}
-  else {evc.className='ev minus';jd.innerHTML='<span class="minus">過剰人気</span>';tr.classList.remove('mvym');}
-  if(LAST) renderParade(); // オッズ入力でレン/ケイ/デスクの見立てを更新
-}
-// ===== 狙いモード（予想家の意見をアプリに反映）=====
-var MODE='value', NPT=8; // NPT=表示点数(絞り込み)
-function renderTri(){
-  if(!LAST) return;
-  var all=trifecta(LAST.p, LAST.w), list, reco; // all は確率降順(2・3着は攻め力反映)
-  if(MODE==='honmei'){
-    list=all.slice(0,10); // 最上位＝堅い目
-    reco='🎯<b>本命モード</b>（鉄板剛・複勝ナオ・回収ジン）：確率<b>最上位＝堅い目</b>で的中率狙い。1着固定＋3着広め。';
-  }else if(MODE==='ana'){
-    list=all.filter(function(t){return (1/t.prob)>=25;}).slice(0,14); // 高配当
-    if(list.length<4) list=all.slice(-14).reverse();
-    reco='💥<b>大穴モード</b>（荒波テツ・万舟リク・歪みケイ）：分岐<b>25倍以上</b>の高配当を"起きやすい順"で。<b>実オッズが分岐を上回る歪み</b>だけ薄く。ただの万舟には乗らない。';
-  }else{
-    list=all.slice(10,26); // 本命の"次の層"＝妙味が出やすい中位
-    reco='⚖<b>妙味モード</b>（確率屋レン・AIノヴァ）：本命の<b>次の中位層</b>＝妙味(実オッズ>分岐)が出やすい所。過剰人気は薄く、軸は絡める。';
-  }
-  list=list.slice(0,NPT); // 絞り込み（点数）
-  document.getElementById('tri').innerHTML=list.map(function(t){
-    var be=1/t.prob;
-    return '<tr data-p="'+t.prob+'"><td><b>'+fmtC(t.combo)+'</b></td><td>'+(t.prob*100).toFixed(2)+'%</td>'+
-      '<td>'+be.toFixed(1)+'</td>'+
-      '<td><input type="number" class="odds" step="0.1" placeholder="入力" style="width:60px"></td>'+
-      '<td class="ev">–</td><td class="jd note" style="text-align:left">分岐↑で買い</td></tr>';
-  }).join('');
-  document.getElementById('reco').innerHTML=reco;
-}
-Array.prototype.forEach.call(document.querySelectorAll('.mode'),function(b){
-  b.addEventListener('click',function(){
-    MODE=b.getAttribute('data-m');
-    Array.prototype.forEach.call(document.querySelectorAll('.mode'),function(x){x.classList.toggle('active',x===b);});
-    renderTri();
-  });
-});
 document.getElementById('calc').addEventListener('click',render);
-document.getElementById('tri').addEventListener('input',onOdds); // 一度だけ束ねる(委譲)
-
-// ===== 軸3: 資金配分（予算→妙味目へエッジ比例で配分）=====
-function allocate(){
-  var budget=+document.getElementById('budget').value||0;
-  var out=document.getElementById('allocout');
-  if(!LAST){out.textContent='先に「数値化して計算」してください。';return;}
-  if(budget<100){out.textContent='予算を入れてください。';return;}
-  var cand=[];
-  Array.prototype.forEach.call(document.querySelectorAll('#tri tr'),function(tr){
-    var oi=tr.querySelector('.odds'), odds=oi?(+oi.value||0):0, prob=+tr.getAttribute('data-p')||0;
-    if(odds>0&&prob>0){ var ev=odds*prob; if(ev>=1.1) cand.push({combo:tr.querySelector('b').textContent,ev:ev,prob:prob,odds:odds,w:prob*(ev-1)}); }
-  });
-  if(!cand.length){ out.innerHTML='<b class="minus">妙味（EV≥1.1）の目なし → 見送り推奨。</b> 実オッズを入れて、分岐を上回る目が出たら配分します。'; return; }
-  cand.sort(function(a,b){return b.w-a.w;});
-  var sw=cand.reduce(function(a,b){return a+b.w;},0)||1;
-  cand.forEach(function(c){ c.yen=Math.max(100,Math.round(budget*c.w/sw/100)*100); });
-  var used=cand.reduce(function(a,b){return a+b.yen;},0);
-  cand[0].yen+=(budget-used); if(cand[0].yen<100)cand[0].yen=100;
-  var total=cand.reduce(function(a,b){return a+b.yen;},0);
-  var expRet=cand.reduce(function(a,c){return a+c.prob*c.odds*c.yen;},0);
-  out.innerHTML='<b>💰 配分提案（妙味のみ・エッジ比例）</b><br>'+
-    cand.map(function(c){return '<b>'+c.combo+'</b>：¥'+c.yen+' <span class="note">(オッズ'+c.odds.toFixed(1)+'/EV'+c.ev.toFixed(2)+')</span>';}).join('<br>')+
-    '<br>計¥'+total+'／的中時 期待払戻 約¥'+Math.round(expRet)+
-    '<br><span class="note">※1レース上限を守る・<b>取り返しで増額しない</b>・妙味が薄れたら見送り。</span>';
-}
-document.getElementById('alloc').addEventListener('click',allocate);
 document.getElementById('water').addEventListener('change',function(){ if(LAST)render(); });
-document.getElementById('npts').addEventListener('change',function(){ NPT=+this.value||8; renderTri(); });
-
-// ===== 軸2艇→3着流し（頭を動かさず配当を稼ぐ＝"少しのズレ"を防ぐ）=====
-function nagashi(){
-  var out=document.getElementById('nagashiout');
-  if(!LAST){out.textContent='先に「数値化して計算」してください。';return;}
-  var p=LAST.p, w=LAST.w||p, boats=LAST.boats, W=w.reduce(function(s,x){return s+x;},0);
-  var ord=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
-  var a=ord[0], b=ord[1], others=ord.slice(2);
-  var nm=function(i){return (i+1)+(boats[i].name||'');};
-  var rows=[];
-  others.forEach(function(c){
-    rows.push({combo:[a+1,b+1,c+1],prob:p[a]*(w[b]/(W-w[a]))*(w[c]/(W-w[a]-w[b]))});
-    rows.push({combo:[b+1,a+1,c+1],prob:p[b]*(w[a]/(W-w[b]))*(w[c]/(W-w[b]-w[a]))});
-  });
-  rows.sort(function(x,y){return (1/y.prob)-(1/x.prob);}); // 高配当順
-  out.innerHTML='<b>軸2艇＝'+nm(a)+'・'+nm(b)+'（実力ワンツー・頭は動かさない）</b><br>3着を残り4艇に流す（人気薄ほど高配当＝妙味の源泉）：<br>'+
-    rows.map(function(r){return '<b>'+r.combo.join('-')+'</b> <span class="note">分岐'+(1/r.prob).toFixed(0)+'倍</span>';}).join('　')+
-    '<br><span class="note">※ここから実オッズ&gt;分岐の目を厚く。<b>3着の人気薄(高分岐)</b>が高配当の狙い（今日の4-3-5型）。頭を穴にするより、軸固定で3着を振るのが正解。</span>';
-}
-document.getElementById('nagashi').addEventListener('click',nagashi);
 
 // ===== 本日の厳選レース（全場スキャン→🟢打ち候補をピック）=====
 var DAYRACES=[];
