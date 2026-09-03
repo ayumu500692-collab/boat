@@ -82,6 +82,17 @@ small.hint{color:var(--mut);font-size:11px}
 .deskbox .dh{color:var(--accent);font-weight:700;margin-bottom:5px}
 .deskbox .ln{margin:3px 0}
 .deskbox .ln b{color:var(--ink)}
+.boss{border-radius:11px;padding:11px 13px;margin-bottom:10px;border:1.5px solid #d9a441;background:linear-gradient(180deg,rgba(217,164,65,.14),rgba(217,164,65,.05))}
+.boss .bh{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.boss .bh .bi{font-size:19px}
+.boss .bh .bn{font-weight:700;color:#f0c674}
+.boss .bh .bt{margin-left:auto;font-weight:700;font-size:12.5px;padding:2px 10px;border-radius:999px;border:1px solid}
+.boss .bw{font-size:13px;line-height:1.7}
+.boss .bw b{color:var(--ink)}
+.bt.b-go{color:var(--plus);border-color:var(--plus);background:rgba(55,211,153,.12)}
+.bt.b-warn{color:var(--warn);border-color:var(--warn);background:rgba(242,179,61,.12)}
+.bt.b-stop{color:var(--minus);border-color:var(--minus);background:rgba(242,86,90,.12)}
+.bt.b-mid{color:var(--mut);border-color:var(--line)}
 </style>
 </head>
 <body>
@@ -132,7 +143,7 @@ small.hint{color:var(--mut);font-size:11px}
   </div>
 
   <div class="card" id="outp" style="display:none">
-    <h2>④ 予想部隊 11人の見立て <span class="tag">10予想家＋統括</span></h2>
+    <h2>④ 予想部隊の見立て <span class="tag">10予想家＋統括＋最高顧問</span></h2>
     <div class="note" style="margin:0 0 8px">同じ数字を<b>10人が別々の角度</b>で斬る。<b>割れ方</b>自体が判断材料。最後に統括デスクが束ねる。（オッズを入れるとレン/ケイの見立てが更新）</div>
     <div id="parade"></div>
     <div id="desk" style="margin-top:10px"></div>
@@ -394,12 +405,33 @@ function renderParade(){
   else if(quality==='堅い') call='<b>本命堅いが機力上位('+nm(maxMotor)+')が別。</b>'+nm(ord[0])+'頭固定＋'+nm(maxMotor)+'を2-3着に必ず入れる。';
   else if(quality==='中庸') call='<b>割れ気味。</b>妙味目だけ軽く（'+meivi+'）、無ければ見送り。軸('+nm(ord[0])+')は後付けで動かさない。3点以下。';
   else call='<b>難解＝各家の軸がバラけ。見送りが最善。</b>触るなら'+nm(ord[0])+'-'+nm(ord[1])+'流しを¥500で1〜2点。';
-  document.getElementById('desk').innerHTML='<div class="deskbox"><div class="dh">🎩 統括デスク 藤堂 玄 ＝ 最終決定</div>'+
+  // ===== 最高顧問（ベテランプロ）銭亀 源蔵＝統括の上・最終ジャッジ =====
+  var dangerC1=(c1===ord[0])&&(((boats[c1].motor||0)>0&&(boats[c1].motor||0)<32)||((boats[c1].st||0)>=0.18)||(boats[c1].cwin&&boats[c1].cwin<52)||maegumi);
+  var bClass,bJudge,bWord;
+  if(quality==='難解'&&!(hasOdds&&mvym.length)){
+    bClass='b-stop'; bJudge='待った（見送り）';
+    bWord='40年やって分かる。こういう混戦で妙味も無いレースは、触った時点で負けや。'+(maegumi?'進入も乱れとる。':'')+'今日は<b>見送りが一番の勝ち</b>。金は次に取っとけ。';
+  }else if(dangerC1){
+    bClass='b-warn'; bJudge='条件付き（本命に疑い）';
+    bWord='この1号艇（'+nm(c1)+'）、人気ほど信用できん。'+(((boats[c1].motor||0)>0&&(boats[c1].motor||0)<32)?'モーターが噴いとらん。':'')+(((boats[c1].st||0)>=0.18)?'ST遅い＝叩かれる。':'')+(maegumi?'前づけで枠なりが崩れとる。':'')+'頭一本は危険や。<b>2着付けに逃がすか、'+nm(anaHead)+'の一撃も一枚買え</b>。1頭固定は必ず保険。';
+  }else if(quality==='堅い'&&c1===ord[0]){
+    bClass='b-go'; bJudge='GO（本命勝負）';
+    bWord='これは素直でええ。'+nm(c1)+'から獲れる。ただしベテランほど欲張らん——<b>点数は絞って、保険を1枚</b>。転覆だけが怖い。';
+  }else if(hasOdds&&mvym.length&&mvym[0].ev>=1.3){
+    bClass='b-go'; bJudge='GO（妙味勝負）';
+    bWord='市場が間違うとる。'+mvym[0].c+'（実'+mvym[0].od.toFixed(1)+'倍）は<b>歪みや、獲りにいけ</b>。ただし妙味の出た目だけ。人気の本命は見でええ。';
+  }else{
+    bClass='b-mid'; bJudge='小さく（妙味だけ）';
+    bWord='無理はするな。'+(hasOdds?(mvym.length?'妙味の'+mvym.length+'点だけ軽く。':'今の実オッズに妙味は無い＝ほぼ見送りや。'):'まずオッズを入れてみい。')+'<b>取り返しの増額だけは絶対やるな</b>。それで何人も消えていった。';
+  }
+  var bossBox='<div class="boss"><div class="bh"><span class="bi">🎖️</span><span class="bn">最高顧問 銭亀 源蔵</span><span class="bt '+bClass+'">'+bJudge+'</span></div><div class="bw">'+bWord+'</div></div>';
+  var deskBox='<div class="deskbox"><div class="dh">🎩 統括デスク 藤堂 玄（部隊まとめ）</div>'+
     '<div class="ln"><b>レース質：</b>'+quality+'（トップ勝率'+(top*100).toFixed(0)+'%・2番手と'+(gap*100).toFixed(0)+'pt差）'+(maegumi?' ／ 前づけ有り＝荒れ含み':'')+'</div>'+
     '<div class="ln"><b>本命線：</b>'+nm(ord[0])+' → '+nm(ord[1])+'・'+nm(ord[2])+'（剛・ナオ・ノヴァ）</div>'+
     '<div class="ln"><b>妙味線：</b>'+meivi+'（レン・ケイ）</div>'+
     '<div class="ln"><b>穴線：</b>'+nm(anaHead)+' 頭（テツ・リク）'+((boats[anaHead].motor||0)>=42?'＝機力'+(boats[anaHead].motor||0).toFixed(0)+'%で一発あり':'＝機力平凡で薄く')+'</div>'+
-    '<div class="ln" style="margin-top:5px;padding-top:5px;border-top:1px solid var(--line)"><b>▶ 最終：</b>'+call+'</div></div>';
+    '<div class="ln" style="margin-top:5px;padding-top:5px;border-top:1px solid var(--line)"><b>▶ まとめ：</b>'+call+'</div></div>';
+  document.getElementById('desk').innerHTML=bossBox+deskBox;
 }
 function onOdds(e){
   if(!e.target.classList.contains('odds'))return;
