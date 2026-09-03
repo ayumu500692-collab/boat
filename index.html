@@ -170,6 +170,12 @@ small.hint{color:var(--mut);font-size:11px}
       <textarea id="xtext" readonly style="width:100%;height:120px;font-size:12px;line-height:1.5"></textarea>
       <button class="btn ghost" id="copyx" style="margin-top:6px">X告知をコピー</button>
     </div>
+    <button class="btn ghost" id="mkcard" style="margin-top:10px">📸 予想カードを画像で作る（Xに貼る用）</button>
+    <div id="cardout" hidden style="margin-top:8px">
+      <div class="note" style="margin:0 0 4px">スマホは画像を<b>長押し→保存</b>／PCは下のボタンでDL → Xの投稿に添付</div>
+      <img id="cardimg" alt="予想カード" style="width:100%;max-width:340px;border-radius:10px;border:1px solid var(--line);display:block">
+      <a id="carddl" download="予想カード.png" class="btn ghost" style="display:inline-block;width:auto;margin-top:6px;padding:6px 14px;text-decoration:none">画像をダウンロード</a>
+    </div>
   </div>
 
   <div class="card" id="outp" style="display:none">
@@ -601,6 +607,62 @@ function renderNote(){
 document.getElementById('mknote').addEventListener('click',renderNote);
 document.getElementById('copynote').addEventListener('click',function(){copyTA('notetext',this);});
 document.getElementById('copyx').addEventListener('click',function(){copyTA('xtext',this);});
+
+// ===== 📸 予想カード画像（Xに貼る用・1080x1080）=====
+var HULL={1:['#eef0f4','#111'],2:['#2b2f38','#fff'],3:['#e5556a','#fff'],4:['#4da3ff','#fff'],5:['#f2c94c','#111'],6:['#37d399','#111']};
+function drawCard(){
+  if(!LAST)return null;
+  var f=pickFinal(), boats=LAST.boats;
+  var jcd=+((document.getElementById('jcd')||{}).value)||0, rno=(document.getElementById('rno')||{}).value||'';
+  var venue=((typeof STADIUMS!=='undefined'&&STADIUMS[jcd])?STADIUMS[jcd]:'')+' '+rno+'R';
+  var p=LAST.p, ord=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
+  var top=p[ord[0]], gap=top-p[ord[1]];
+  var q=(top>=0.60&&gap>=0.22)?['🟢','堅い','#37d399']:(top>=0.48?['🟡','中庸','#f2b33d']:['🔴','難解','#f2565a']);
+  var W=1080,H=1080, cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  var x=cv.getContext('2d'); if(!x)return null;
+  var FN=function(w,s){return w+' '+s+'px system-ui,-apple-system,\"Hiragino Kaku Gothic ProN\",\"Noto Sans JP\",sans-serif';};
+  var g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0d1428'); g.addColorStop(1,'#141a2e'); x.fillStyle=g; x.fillRect(0,0,W,H);
+  x.strokeStyle='#2a3350'; x.lineWidth=6; x.strokeRect(18,18,W-36,H-36);
+  x.textBaseline='middle';
+  x.fillStyle='#4da3ff'; x.font=FN('700',38); x.textAlign='left'; x.fillText('数値予想エンジン', 68, 88);
+  x.fillStyle='#93a0bd'; x.font=FN('400',30); x.textAlign='right'; x.fillText('@lovely_otter532', W-68, 88);
+  x.fillStyle='#e8ecf6'; x.font=FN('800',92); x.textAlign='left'; x.fillText(venue, 68, 200);
+  x.fillStyle=q[2]; x.font=FN('700',44); x.textAlign='right'; x.fillText(q[0]+' '+q[1], W-68, 200);
+  function circle(cx,cy,r,bn){var c=HULL[bn]||['#888','#fff']; x.beginPath();x.arc(cx,cy,r,0,Math.PI*2);x.fillStyle=c[0];x.fill();x.fillStyle=c[1];x.font=FN('800',Math.round(r*1.1));x.textAlign='center';x.fillText(''+bn,cx,cy+2);}
+  // ◎本命
+  x.fillStyle='#4da3ff'; x.font=FN('800',66); x.textAlign='left'; x.fillText('◎',70,360);
+  x.fillStyle='#93a0bd'; x.font=FN('500',34); x.fillText('本命',158,360);
+  circle(320,360,42,f.honmei+1);
+  x.fillStyle='#e8ecf6'; x.font=FN('800',56); x.textAlign='left'; x.fillText((boats[f.honmei].name||'')+'  勝率'+(top*100).toFixed(0)+'%',388,360);
+  // ○中堅
+  x.fillStyle='#f2b33d'; x.font=FN('800',66); x.textAlign='left'; x.fillText('○',70,510);
+  x.fillStyle='#93a0bd'; x.font=FN('500',34); x.fillText('中堅',158,510);
+  circle(320,510,36,f.o1+1); x.fillStyle='#e8ecf6'; x.font=FN('700',46); x.textAlign='left'; x.fillText(boats[f.o1].name||'',372,510);
+  circle(700,510,36,f.o2+1); x.fillStyle='#e8ecf6'; x.font=FN('700',46); x.textAlign='left'; x.fillText(boats[f.o2].name||'',752,510);
+  // ▲穴
+  x.fillStyle='#f2565a'; x.font=FN('800',66); x.textAlign='left'; x.fillText('▲',70,660);
+  x.fillStyle='#93a0bd'; x.font=FN('500',34); x.fillText('穴',158,660);
+  circle(320,660,42,f.ana+1);
+  x.fillStyle='#e8ecf6'; x.font=FN('800',56); x.textAlign='left'; x.fillText((boats[f.ana].name||'')+'  一発',388,660);
+  // CTA
+  x.fillStyle='#1c2440'; x.fillRect(68,760,W-136,110); x.strokeStyle='#4da3ff'; x.lineWidth=3; x.strokeRect(68,760,W-136,110);
+  x.fillStyle='#e8ecf6'; x.font=FN('700',46); x.textAlign='center'; x.fillText('買い目・EV・資金配分は note で', W/2, 815);
+  // 免責
+  x.fillStyle='#93a0bd'; x.font=FN('400',27); x.textAlign='center';
+  x.fillText('※独自ツールの分析。的中・利益は保証しません。控除率25%は覆せない。', W/2, 935);
+  x.fillText('公営競技は20歳以上・余剰資金で・負けを取り返さない。', W/2, 978);
+  return cv;
+}
+function renderCard(){
+  var cv=drawCard(); if(!cv){return;}
+  var url; try{url=cv.toDataURL('image/png');}catch(e){return;}
+  document.getElementById('cardimg').src=url;
+  var dl=document.getElementById('carddl'); dl.href=url;
+  var jcd=+((document.getElementById('jcd')||{}).value)||0, rno=(document.getElementById('rno')||{}).value||'';
+  dl.download=((typeof STADIUMS!=='undefined'&&STADIUMS[jcd])?STADIUMS[jcd]:'race')+rno+'R.png';
+  document.getElementById('cardout').hidden=false;
+}
+document.getElementById('mkcard').addEventListener('click',renderCard);
 
 // ===== 本日の厳選レース（全場スキャン→🟢打ち候補をピック）=====
 var DAYRACES=[];
