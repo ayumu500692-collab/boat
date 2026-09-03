@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ボート数値予想エンジン</title>
+<meta name="theme-color" content="#0b1020">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ボート">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAADQElEQVR42u3YO3ITURCG0ZvzMDYoBgzmYbZBQEJKwE7wMmAJLM4ZRVHkl4CCIpFHyDPS3P5P8MWa7j6lkqbdefCkS1VqliCgJaAloCWgBbQEtAS0BLQEtICWhgf9tEtVAlpAS0BLQEtAC2gJaAloCWgJaGWCPj3vUpWAFtAS0BLQEtACWioC+u7peZeqBLSAloCWDgP6WZeqBLSAloCWgJaAFtAS0BLQEtAS0MoEffa8S1UCWkBLQEtAS0ALaAloCWgJaAloAS2ND/qiS1UCWkBLqwV97+yiS1UCWkBLQEtA1+nb95/9x4ePt84ugQYaaAENtIBeAeiHL7qWbzbQdnljQAMNtIAGGmiggQYaaKCBBlqHAG0PQAMtoIEGWkADLaBXCPpl1/L9Bm0PSwc00EALaKCBtgeggRbQi4E8du4ANNBAC2iggQYaaKCBBhpo3QT6/qNXXdNNYXv/td+6qc9wh+mABhpooIEGGmiggQYaaKCBBlpAAw000EADDTTQQAMN9GFBHyJ3ABroPNCvu6ZbB2h3mApooIEGLCOgoYYZaKhhBhpqmGv/KYQR5nJvOaD0BqV5vSav7YAGGmioYT4E6M1lrxisO2AuePeyoKHOw1weNNRZmCNAQ52DOQY01BmYo0Cno065cRToVNRJ920nm8ueVhLmtNtGgk5BnXjXWNDVUafeNBp0VdTJ92wnmzc9uZqgc+8ZD7oa6vRbRoN+/O7T3ypg/nceoEMhV0G9baY40CnDbzt4BdS7zpZw31Z5+F0PPTLqfWeset9Wbfh9D5xcpfu2CsMfG8Tbz9ezBfft7ttGXMAavtXmRLxW3CPet42wgBTAqcDnfL52zMWM8PtyDZDXCHut923+FI2BeGTcQIMMNtCZkMEGuiRksINBV4acDrulDJ+EOBH3nxlb9cFBzrpvqzo4uLVhb5upVRsc1Nqwp2ZpFYaHsjbu/3n+NvLgANaGvc9zt5EWAFpt4HM8Z1tm+KvZgmmNuNd733bMpcBRG/0xPrdZvioFtICWgJaAloAW0BLQEtDSsqC/XHepSkALaAloCWgJaAEtAS0BLQEtAS2gJaAloCWgJaAFtAS0BLQEtAS0gJaG6xePOUzZzmfz2wAAAABJRU5ErkJggg==">
+
+<style>
+:root{
+  --bg:#0b1020; --surface:#141a2e; --surface2:#1c2440; --line:#2a3350;
+  --ink:#e8ecf6; --mut:#93a0bd; --accent:#4da3ff; --plus:#37d399; --minus:#f2565a; --warn:#f2b33d;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Zen Kaku Gothic New",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.6;padding-bottom:40px}
+header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,#111830,#0b1020);border-bottom:1px solid var(--line);padding:12px 16px;display:flex;align-items:center;gap:10px}
+header b{color:var(--accent)}
+.sub{color:var(--mut);font-size:11px;margin-left:auto}
+main{max-width:960px;margin:0 auto;padding:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 10px}
+.warn{background:rgba(242,179,61,.1);border:1px solid rgba(242,179,61,.35);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--ink);margin-bottom:12px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:5px 4px;border-bottom:1px solid var(--line);text-align:center}
+th{color:var(--mut);font-weight:500;font-size:11px}
+td:first-child,th:first-child{text-align:left}
+input,select{background:var(--surface2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:6px;font-size:13px;width:100%;font-family:inherit}
+input{text-align:center}
+.wk{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#111}
+.c1{background:#eef0f4}.c2{background:#2b2f38;color:#fff}.c3{background:#e5556a;color:#fff}.c4{background:#4da3ff;color:#fff}.c5{background:#f2c94c}.c6{background:#37d399;color:#111}
+button.btn{background:var(--accent);color:#04122b;border:0;border-radius:10px;padding:12px;font-weight:700;font-size:15px;width:100%;cursor:pointer;margin-top:10px}
+button.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.bar{height:16px;background:var(--surface2);border-radius:4px;overflow:hidden;flex:1}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,#2b6cb0,var(--accent))}
+.row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:13px}
+.row .w{width:64px;color:var(--mut)}
+.pct{width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.note{color:var(--mut);font-size:11.5px;margin-top:6px}
+.tri td{font-variant-numeric:tabular-nums}
+.tag{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut);margin-left:4px}
+.tag.auto{color:#7fd4ff;border-color:#2b6cb0}.tag.man{color:var(--warn);border-color:rgba(242,179,61,.5)}
+.plus{color:var(--plus)}.minus{color:var(--minus)}
+.pl{padding:8px 0;border-bottom:1px solid var(--line)}
+.pl:last-child{border-bottom:0}
+.pl .row{margin:0}
+.role{font-size:11px;color:var(--accent);font-weight:700;margin-left:2px}
+.why{display:flex;flex-wrap:wrap;gap:4px;padding-left:30px}
+.wt{font-size:10.5px;color:var(--mut);background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:1px 7px}
+#modes{display:flex;gap:6px;margin:0 0 10px}
+.mode{flex:1;background:var(--surface2);color:var(--mut);border:1px solid var(--line);border-radius:9px;padding:8px 4px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer}
+.mode.active{background:var(--accent);color:#04122b;border-color:var(--accent)}
+.foot{color:var(--mut);font-size:11px;text-align:center;padding:14px 0}
+.mvym{background:rgba(55,211,153,.14);}
+.mini{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut)}
+.mini select,.mini input{width:auto}
+.verdict{border-radius:10px;padding:9px 12px;margin-bottom:10px;font-size:13px;font-weight:700;border:1px solid}
+.v-good{background:rgba(55,211,153,.12);border-color:rgba(55,211,153,.45);color:var(--plus)}
+.v-mid{background:rgba(242,179,61,.10);border-color:rgba(242,179,61,.4);color:var(--warn)}
+.v-bad{background:rgba(242,86,90,.10);border-color:rgba(242,86,90,.4);color:var(--minus)}
+.verdict small{display:block;color:var(--mut);font-weight:400;margin-top:2px}
+.grid2{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+small.hint{color:var(--mut);font-size:11px}
+</style>
+</head>
+<body>
+<header><b>数値</b>予想エンジン <span class="tag">v2</span><span class="sub">実測1着率 / 当地3連 / 前づけ / 妙味</span></header>
+<main>
+  <div class="warn">⚠ 数字は<b>感情のミスを消す</b>が、<b>当たりは保証しない</b>（控除率25%＋分散／転覆・エンストは数値に出ない）。これは"ブレない軸"であって"必勝法"ではない。<b>可能性でなく「妙味(実オッズ&gt;分岐)」だけを買う。</b></div>
+
+  <div class="card">
+    <h2>① レースを指定して自動取得 <span class="tag auto">自動</span></h2>
+    <div class="grid2">
+      <select id="jcd" style="width:auto;flex:1;min-width:110px"></select>
+      <input id="ymd" type="date" style="width:auto;flex:1;min-width:130px">
+      <select id="rno" style="width:auto;min-width:72px"></select>
+      <button class="btn" id="fetch" style="width:auto;margin:0;padding:10px 16px">取得</button>
+    </div>
+    <div class="grid2" style="margin-top:8px">
+      <label class="mini">🌊 水面
+        <select id="water" style="width:auto;min-width:130px">
+          <option value="calm">平水/無風（イン素直）</option>
+          <option value="mid">やや荒れ</option>
+          <option value="rough">荒れ（風強/波）</option>
+        </select>
+      </label>
+      <span class="note" style="margin:0">荒れるほどイン有利が薄れ、好機力の外・センターが台頭。</span>
+    </div>
+    <div class="note" id="fetchmsg">会場・日付・Rを選んで「取得」。公式データ配信(Boatrace Open API)から<b>出走表(級別・全国/当地2連3連・モーター・ST)</b>を自動入力。※実測1着率・展示・オッズは配信に無いので手入力で補強（下記）。</div>
+  </div>
+
+  <div class="card">
+    <h2>② 出走表（自動＋手修正）</h2>
+    <div style="overflow-x:auto">
+      <table id="inp"><thead><tr>
+        <th>コース</th><th>選手<span class="tag auto">自</span></th><th>級別</th><th>全国2連<span class="tag auto">自</span></th><th>当地2連<span class="tag auto">自</span></th><th>当地3連<span class="tag auto">自</span></th><th>M2連<span class="tag auto">自</span></th><th>平均ST<span class="tag auto">自</span></th><th>実測1着率<span class="tag man">手</span></th><th>展示T<span class="tag man">手</span></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+    <div class="note"><b>コース＝進入</b>（前づけがあれば書き換える＝v2の要）。<b>実測1着率</b>＝新概念データの「1コース1着率」等（本命の堅さを最も左右。任意）。展示T・実測は補正、実力(2連率)を覆さない。</div>
+    <button class="btn" id="calc">数値化して計算</button>
+    <button class="btn ghost" id="demo" style="margin-top:8px">デモ：常滑11R(石倉型・実測1着率あり)</button>
+  </div>
+
+  <div class="card" id="out" style="display:none">
+    <h2>③ 各艇の確率＋レース選定</h2>
+    <div id="verdict"></div>
+    <div id="probs"></div>
+    <div class="note" id="topnote"></div>
+  </div>
+
+  <div class="card" id="out2" style="display:none">
+    <h2>④ 3連単 分岐オッズ＆妙味判定 <span class="tag man">オッズ手入力</span></h2>
+    <div id="modes">
+      <button class="mode" data-m="honmei">🎯 本命</button>
+      <button class="mode active" data-m="value">⚖ 妙味</button>
+      <button class="mode" data-m="ana">💥 大穴</button>
+    </div>
+    <div class="note" style="margin:0 0 8px">「分岐オッズ」＝1÷確率＝<b>買っていい最低倍率</b>。賭けサイトの実オッズがこれより高ければ買い（打ち込めばEVも自動計算）。<b class="plus">EV&gt;1=妙味</b> / <span class="minus">EV&lt;1=過剰人気</span>。</div>
+    <div style="overflow-x:auto"><table class="tri"><thead><tr><th>買い目</th><th>確率</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>判定</th></tr></thead><tbody id="tri"></tbody></table></div>
+    <div class="note" id="reco"></div>
+    <div class="grid2" style="margin:10px 0 0;padding-top:10px;border-top:1px solid var(--line)">
+      <label class="mini">💰 予算¥ <input id="budget" type="number" value="3000" step="500" style="width:88px"></label>
+      <button class="btn" id="alloc" style="width:auto;margin:0;padding:8px 16px">資金配分を提案</button>
+    </div>
+    <div class="note" id="allocout" style="margin-top:8px">実オッズを入れてから「資金配分を提案」→ 妙味(EV&gt;1)の目に予算をエッジ比例で配分します。</div>
+  </div>
+
+  <div class="foot">v2モデル：級別(重み小)＋全国/当地2連・<b>当地3連</b>・モーター・STを数値化→実力指数→コース基礎勝率×<b>実測1着率ブレンド</b>→Harville法で3連単→<b>実オッズと突合して妙味</b>。前づけは進入コース欄で反映。<br>公営競技・20歳未満禁止／余剰資金で・負けを追わない・見送りも成果。</div>
+</main>
+<script>
+/* ===================== v2 数理モデル ===================== */
+var GRADE={A1:1.0,A2:0.78,B1:0.5,B2:0.28};
+var COURSE_BASE=[0.55,0.155,0.12,0.105,0.05,0.02]; // コース1..6 基礎勝率(概算)
+// v2重み: 級別を下げ、実績(2連/当地3連)を主に
+var W={grade:0.12, nat:0.24, loc:0.16, loc3:0.14, motor:0.18, st:0.16};
+var K=1.3;         // コース×実力の効き
+var CWIN_BLEND=0.5; // 実測1着率の混合率(段階A)
+function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+
+function strength(b){
+  var g=GRADE[b.grade]!=null?GRADE[b.grade]:0.5;
+  var nat=clamp(b.nat/60,0,1);
+  var loc=clamp(b.loc/60,0,1);
+  var loc3=clamp((b.loc3||b.loc)/80,0,1);      // 当地3連(無ければ2連で代用)
+  var mot=clamp(b.motor/50,0,1);
+  var st=clamp((0.21-b.st)/0.09,0,1);
+  return W.grade*g+W.nat*nat+W.loc*loc+W.loc3*loc3+W.motor*mot+W.st*st;
+}
+function tenjiAdj(boats){ // 展示Tの微補正(±0.03)
+  var vals=boats.map(function(b){return b.tenji||null;});
+  var valid=vals.filter(function(v){return v!=null&&v>0;});
+  if(valid.length<3) return boats.map(function(){return 0;});
+  var min=Math.min.apply(null,valid),max=Math.max.apply(null,valid);
+  return boats.map(function(b){
+    if(!b.tenji||b.tenji<=0) return 0;
+    var r=(max-b.tenji)/(max-min||1);
+    return (r-0.5)*0.06;
+  });
+}
+// 軸2: 水面条件でコース基礎勝率を可変化＋荒れ時は好機力を加点
+function waterCB(w){
+  if(w==='rough') return [0.47,0.15,0.13,0.125,0.08,0.045];
+  if(w==='mid')   return [0.52,0.155,0.125,0.11,0.06,0.03];
+  return COURSE_BASE.slice();
+}
+// 段階A: 1着確率(コース支配 + 実測1着率ブレンド + 水面)
+function winProbs(boats){
+  var w=(document.getElementById('water')||{}).value||'calm';
+  var cb=waterCB(w);
+  var mBonus=w==='rough'?0.14:(w==='mid'?0.06:0); // 荒れ×好機力の相互作用
+  var adj=tenjiAdj(boats);
+  var str=boats.map(function(b,i){
+    var s=Math.max(0.05,strength(b)+adj[i]);
+    if(mBonus>0) s*=(1+mBonus*clamp((b.motor-35)/20,0,1)); // M35超で加点、荒れほど大
+    return s;
+  });
+  var mean=str.reduce(function(a,b){return a+b;},0)/str.length;
+  var base=boats.map(function(b,i){
+    var course=clamp((b.course||i+1)-1,0,5);
+    return cb[course]*Math.pow(str[i]/mean,K);
+  });
+  var sumBase=base.reduce(function(a,b){return a+b;},0);
+  // 実測1着率(cwin)があれば半分ブレンド
+  var raw=boats.map(function(b,i){
+    var pb=base[i]/sumBase;
+    if(b.cwin&&b.cwin>0){ return CWIN_BLEND*(b.cwin/100)+(1-CWIN_BLEND)*pb; }
+    return pb;
+  });
+  var s=raw.reduce(function(a,b){return a+b;},0);
+  return {p:raw.map(function(x){return x/s;}),str:str};
+}
+function trifecta(p){
+  var n=p.length,res=[];
+  for(var a=0;a<n;a++)for(var b=0;b<n;b++)for(var c=0;c<n;c++){
+    if(a===b||a===c||b===c)continue;
+    var pa=p[a], pb=p[b]/(1-p[a]), pc=p[c]/(1-p[a]-p[b]);
+    res.push({combo:[a+1,b+1,c+1],prob:pa*pb*pc});
+  }
+  return res.sort(function(x,y){return y.prob-x.prob;});
+}
+function placeRates(p){
+  var n=p.length,top2=new Array(n).fill(0),top3=new Array(n).fill(0);
+  for(var i=0;i<n;i++){
+    var t2=p[i];
+    for(var j=0;j<n;j++){if(j!==i)t2+=p[j]*(p[i]/(1-p[j]));}
+    top2[i]=t2; var t3=t2;
+    for(var j2=0;j2<n;j2++)for(var k=0;k<n;k++){
+      if(j2===i||k===i||j2===k)continue;
+      t3+=p[j2]*(p[k]/(1-p[j2]))*(p[i]/(1-p[j2]-p[k]));
+    }
+    top3[i]=t3;
+  }
+  return {top2:top2,top3:top3};
+}
+// 各艇の"なぜ"を数値から自動生成（根拠タグ）
+function reasons(b){
+  var r=[], c=b.course||0;
+  if(b.cwin>=65) r.push('実測1着率'+b.cwin+'%＝逃げ鉄板級');
+  else if(c===1 && b.cwin>0 && b.cwin<55) r.push('1コースだが1着率'+b.cwin+'%＝逃げ不安');
+  if(b.grade==='A1') r.push('A1');
+  if(b.nat>=50) r.push('全国2連'+Number(b.nat).toFixed(0)+'%＝実力上位');
+  if(b.loc3>=65) r.push('当地3連'+Number(b.loc3).toFixed(0)+'%＝詰め堅い');
+  else if(b.loc>=50) r.push('当地2連'+Number(b.loc).toFixed(0)+'%＝当地巧者');
+  if(b.motor>=45) r.push('M'+Number(b.motor).toFixed(0)+'%＝機力抜群(まくり脅威)');
+  else if(b.motor>0 && b.motor<=18) r.push('M'+Number(b.motor).toFixed(0)+'%＝機力難');
+  if(b.st>0 && b.st<=0.14) r.push('ST'+Number(b.st).toFixed(2)+'＝速い');
+  else if(b.st>=0.19) r.push('ST'+Number(b.st).toFixed(2)+'＝遅め');
+  if(c===1) r.push('1コース＝逃げ本線');
+  else if(c>=4 && b.motor>=40) r.push('外枠×好機力＝一撃の目');
+  if(!r.length) r.push(b.grade+'・目立った強調点なし');
+  return r;
+}
+
+/* ===================== UI ===================== */
+var TB=document.querySelector('#inp tbody');
+var COL=['c1','c2','c3','c4','c5','c6'];
+for(var i=0;i<6;i++){
+  var tr=document.createElement('tr');
+  tr.innerHTML='<td><span class="wk '+COL[i]+'">'+(i+1)+'</span> <input type="number" class="course" value="'+(i+1)+'" style="width:34px;display:inline-block"></td>'+
+    '<td><input type="text" class="name" placeholder="選手名" style="min-width:74px;text-align:left"></td>'+
+    '<td><select class="grade"><option>A1</option><option>A2</option><option>B1</option><option>B2</option></select></td>'+
+    '<td><input type="number" class="nat" step="0.01"></td>'+
+    '<td><input type="number" class="loc" step="0.01"></td>'+
+    '<td><input type="number" class="loc3" step="0.01"></td>'+
+    '<td><input type="number" class="motor" step="0.01"></td>'+
+    '<td><input type="number" class="st" step="0.01" placeholder="0.15"></td>'+
+    '<td><input type="number" class="cwin" step="0.1" placeholder="任意"></td>'+
+    '<td><input type="number" class="tenji" step="0.01" placeholder="任意"></td>';
+  TB.appendChild(tr);
+}
+function readBoats(){
+  return Array.prototype.map.call(TB.querySelectorAll('tr'),function(tr){
+    var q=function(s){return tr.querySelector(s);};
+    return {course:+q('.course').value||0,name:q('.name').value||'',grade:q('.grade').value,nat:+q('.nat').value||0,
+      loc:+q('.loc').value||0,loc3:+q('.loc3').value||0,motor:+q('.motor').value||0,
+      st:+q('.st').value||0.18,cwin:+q('.cwin').value||0,tenji:+q('.tenji').value||0};
+  });
+}
+function fmtC(c){return c.join('-');}
+var LAST=null;
+function render(){
+  var boats=readBoats();
+  var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p};
+  var pr=placeRates(p);
+  var host=document.getElementById('probs');
+  var order=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
+  var ROLE=['◎本命','○対抗','▲単穴','△','△','消'];
+  host.innerHTML=order.map(function(i,idx){
+    var b=boats[i], nm=b.name||('艇'+(i+1)), rs=reasons(b);
+    return '<div class="pl">'+
+      '<div class="row"><span class="wk '+COL[i]+'">'+(i+1)+'</span>'+
+      '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+nm+'</b> <span class="tag">'+b.grade+(b.cwin?'★':'')+'</span> <span class="role">'+ROLE[idx]+'</span></span>'+
+      '<span class="pct">'+(p[i]*100).toFixed(1)+'%</span>'+
+      '<span class="pct" style="color:var(--mut)">連'+(pr.top2[i]*100).toFixed(0)+'</span>'+
+      '<span class="pct" style="color:var(--mut)">複'+(pr.top3[i]*100).toFixed(0)+'</span></div>'+
+      '<div class="bar" style="margin:3px 0 5px"><i style="width:'+(p[i]*100).toFixed(1)+'%"></i></div>'+
+      (rs.length?'<div class="why">'+rs.map(function(x){return '<span class="wt">'+x+'</span>';}).join('')+'</div>':'')+
+      '</div>';
+  }).join('');
+  var t3=order.slice(0,3).map(function(i){return (i+1)+(boats[i].name||'');});
+  document.getElementById('topnote').innerHTML='◎本命 <b>'+t3[0]+'</b> ／ ○対抗 '+t3[1]+' ／ ▲単穴 '+t3[2]+'（軸を後付けの理屈で削らない）。★=実測1着率反映／%=1着率・連=連対・複=複勝。';
+  // 軸1: レース選定判定（打つ/見送り）
+  var top=p[order[0]], gap=top-p[order[1]], b0=boats[order[0]], nm0=(order[0]+1)+(b0.name||'');
+  var vc,vt,vs;
+  if(top>=0.60 && gap>=0.22){vc='v-good';vt='🟢 打ち候補';vs='本命 '+nm0+' が明確（勝率'+(top*100).toFixed(0)+'%・2番手と'+(gap*100).toFixed(0)+'pt差）。軸を絡めて厚く獲る。';}
+  else if(top>=0.48){vc='v-mid';vt='🟡 中庸';vs='本命はいるが盤石でない（'+nm0+' 勝率'+(top*100).toFixed(0)+'%）。妙味(実オッズ>分岐)が出た目だけ軽く。';}
+  else {vc='v-bad';vt='🔴 難解・見送り寄り';vs='軸がぐらつく（トップ勝率'+(top*100).toFixed(0)+'%の混戦）。明確な妙味が無ければ見送りが正解（見送りも成果）。';}
+  document.getElementById('verdict').innerHTML='<div class="verdict '+vc+'">'+vt+'<small>'+vs+'</small></div>';
+  document.getElementById('out').style.display='';
+  renderTri();
+  document.getElementById('out2').style.display='';
+  window.scrollTo({top:document.getElementById('out').offsetTop-10,behavior:'smooth'});
+}
+function onOdds(e){
+  if(!e.target.classList.contains('odds'))return;
+  var tr=e.target.closest('tr'), prob=+tr.getAttribute('data-p'), odds=+e.target.value||0;
+  var ev=odds*prob;
+  var evc=tr.querySelector('.ev'), jd=tr.querySelector('.jd');
+  if(!odds){evc.textContent='–';jd.textContent='オッズ入力';tr.classList.remove('mvym');return;}
+  evc.textContent=ev.toFixed(2);
+  if(ev>=1.1){evc.className='ev plus';jd.innerHTML='<span class="plus">◎妙味(買い)</span>';tr.classList.add('mvym');}
+  else if(ev>=0.95){evc.className='ev';jd.textContent='ほぼフェア';tr.classList.remove('mvym');}
+  else {evc.className='ev minus';jd.innerHTML='<span class="minus">過剰人気</span>';tr.classList.remove('mvym');}
+}
+// ===== 狙いモード（予想家の意見をアプリに反映）=====
+var MODE='value';
+function renderTri(){
+  if(!LAST) return;
+  var p=LAST.p, all=trifecta(p), list, reco;
+  if(MODE==='honmei'){
+    list=all.slice(0,14);
+    reco='🎯<b>本命モード</b>（鉄板剛・複勝ナオ・回収ジン）：確率上位＝<b>的中率狙い</b>。1着固定＋3着を広めに、堅く回収。低期待値は3点に絞る。';
+  }else if(MODE==='ana'){
+    list=all.filter(function(t){return (1/t.prob)>=12;}).slice(0,14);
+    reco='💥<b>大穴モード</b>（荒波テツ・万舟リク・歪みケイ）：分岐<b>12倍以上</b>の高配当ゾーンを"起きやすい順"で表示。<b>実オッズが分岐を上回る歪み</b>だけ薄く広く。ただの万舟には乗らない。';
+  }else{
+    list=all.slice(0,16);
+    reco='⚖<b>妙味モード</b>（確率屋レン・AIノヴァ）：実オッズ&gt;分岐なら買い、過剰人気は薄く。<b>軸は必ず絡める。</b>妙味が無ければ見送り（それも成果）。';
+  }
+  document.getElementById('tri').innerHTML=list.map(function(t){
+    var be=1/t.prob;
+    return '<tr data-p="'+t.prob+'"><td><b>'+fmtC(t.combo)+'</b></td><td>'+(t.prob*100).toFixed(2)+'%</td>'+
+      '<td>'+be.toFixed(1)+'</td>'+
+      '<td><input type="number" class="odds" step="0.1" placeholder="入力" style="width:60px"></td>'+
+      '<td class="ev">–</td><td class="jd note" style="text-align:left">分岐↑で買い</td></tr>';
+  }).join('');
+  document.getElementById('reco').innerHTML=reco;
+}
+Array.prototype.forEach.call(document.querySelectorAll('.mode'),function(b){
+  b.addEventListener('click',function(){
+    MODE=b.getAttribute('data-m');
+    Array.prototype.forEach.call(document.querySelectorAll('.mode'),function(x){x.classList.toggle('active',x===b);});
+    renderTri();
+  });
+});
+document.getElementById('calc').addEventListener('click',render);
+document.getElementById('tri').addEventListener('input',onOdds); // 一度だけ束ねる(委譲)
+
+// ===== 軸3: 資金配分（予算→妙味目へエッジ比例で配分）=====
+function allocate(){
+  var budget=+document.getElementById('budget').value||0;
+  var out=document.getElementById('allocout');
+  if(!LAST){out.textContent='先に「数値化して計算」してください。';return;}
+  if(budget<100){out.textContent='予算を入れてください。';return;}
+  var cand=[];
+  Array.prototype.forEach.call(document.querySelectorAll('#tri tr'),function(tr){
+    var oi=tr.querySelector('.odds'), odds=oi?(+oi.value||0):0, prob=+tr.getAttribute('data-p')||0;
+    if(odds>0&&prob>0){ var ev=odds*prob; if(ev>=1.1) cand.push({combo:tr.querySelector('b').textContent,ev:ev,prob:prob,odds:odds,w:prob*(ev-1)}); }
+  });
+  if(!cand.length){ out.innerHTML='<b class="minus">妙味（EV≥1.1）の目なし → 見送り推奨。</b> 実オッズを入れて、分岐を上回る目が出たら配分します。'; return; }
+  cand.sort(function(a,b){return b.w-a.w;});
+  var sw=cand.reduce(function(a,b){return a+b.w;},0)||1;
+  cand.forEach(function(c){ c.yen=Math.max(100,Math.round(budget*c.w/sw/100)*100); });
+  var used=cand.reduce(function(a,b){return a+b.yen;},0);
+  cand[0].yen+=(budget-used); if(cand[0].yen<100)cand[0].yen=100;
+  var total=cand.reduce(function(a,b){return a+b.yen;},0);
+  var expRet=cand.reduce(function(a,c){return a+c.prob*c.odds*c.yen;},0);
+  out.innerHTML='<b>💰 配分提案（妙味のみ・エッジ比例）</b><br>'+
+    cand.map(function(c){return '<b>'+c.combo+'</b>：¥'+c.yen+' <span class="note">(オッズ'+c.odds.toFixed(1)+'/EV'+c.ev.toFixed(2)+')</span>';}).join('<br>')+
+    '<br>計¥'+total+'／的中時 期待払戻 約¥'+Math.round(expRet)+
+    '<br><span class="note">※1レース上限を守る・<b>取り返しで増額しない</b>・妙味が薄れたら見送り。</span>';
+}
+document.getElementById('alloc').addEventListener('click',allocate);
+document.getElementById('water').addEventListener('change',function(){ if(LAST)render(); });
+
+/* ========== 公式データ自動取得（Boatrace Open API） ========== */
+var STADIUMS=["","桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲郡","常滑","津","三国","びわこ","住之江","尼崎","鳴門","丸亀","児島","宮島","徳山","下関","若松","芦屋","福岡","唐津","大村"];
+var CLASS_MAP={1:"A1",2:"A2",3:"B1",4:"B2"};
+function num(v){v=Number(v);return isNaN(v)?0:v;}
+function pick(o,ks){for(var i=0;i<ks.length;i++){if(o&&o[ks[i]]!=null)return o[ks[i]];}return undefined;}
+(function(){
+  var j=document.getElementById('jcd');
+  for(var i=1;i<=24;i++)j.innerHTML+='<option value="'+i+'">'+STADIUMS[i]+'</option>';
+  var r=document.getElementById('rno');
+  for(var k=1;k<=12;k++)r.innerHTML+='<option value="'+k+'">'+k+'R</option>';
+  var d=new Date();
+  document.getElementById('ymd').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  // 前回の会場・Rを復元（次回から選ぶ手間を減らす）
+  try{
+    var lj=localStorage.getItem('bn_jcd'), lr=localStorage.getItem('bn_rno');
+    if(lj)document.getElementById('jcd').value=lj;
+    if(lr)document.getElementById('rno').value=lr;
+  }catch(e){}
+})();
+function mapBoats(race){
+  var boats=race.boats||race.racers||[];
+  return boats.map(function(b){return {
+    course:num(pick(b,["racer_boat_number","boat_number","waku"]))||0,
+    name:(pick(b,["racer_name","name","racer_name_kanji","racer_name_1"])||'')+'',
+    grade:CLASS_MAP[num(pick(b,["racer_class_number","class_number","class"]))]||"B1",
+    nat:num(pick(b,["racer_national_top_2_percent","national_top_2_percent"])),
+    loc:num(pick(b,["racer_local_top_2_percent","local_top_2_percent"])),
+    loc3:num(pick(b,["racer_local_top_3_percent","local_top_3_percent"])),
+    motor:num(pick(b,["racer_assigned_motor_top_2_percent","motor_top_2_percent"])),
+    st:num(pick(b,["racer_average_start_timing","average_start_timing"]))||0.18
+  };});
+}
+function fillTable(boats){
+  var rows=TB.querySelectorAll('tr');
+  boats.forEach(function(x,i){var r=rows[i];if(!r)return;
+    if(x.course)r.querySelector('.course').value=x.course;
+    if(x.name!=null)r.querySelector('.name').value=x.name;
+    r.querySelector('.grade').value=x.grade;
+    r.querySelector('.nat').value=x.nat||'';
+    r.querySelector('.loc').value=x.loc||'';
+    r.querySelector('.loc3').value=x.loc3||'';
+    r.querySelector('.motor').value=x.motor||'';
+    r.querySelector('.st').value=x.st||'';
+  });
+}
+document.getElementById('fetch').addEventListener('click',function(){
+  var jcd=+document.getElementById('jcd').value;
+  var rno=+document.getElementById('rno').value;
+  var ymd=(document.getElementById('ymd').value||'').replace(/-/g,'');
+  var msg=document.getElementById('fetchmsg');
+  try{localStorage.setItem('bn_jcd',jcd);localStorage.setItem('bn_rno',rno);}catch(e){}
+  if(ymd.length!==8){msg.textContent='日付を選んでください。';return;}
+  var y=ymd.slice(0,4);
+  var url='https://boatraceopenapi.github.io/programs/v2/'+y+'/'+ymd+'.json';
+  msg.textContent='取得中… '+STADIUMS[jcd]+' '+rno+'R';
+  fetch(url).then(function(res){if(!res.ok)throw new Error('HTTP '+res.status);return res.json();})
+    .then(function(data){
+      var progs=data.programs||data.results||(Array.isArray(data)?data:[]);
+      var race=progs.find(function(p){return num(pick(p,["race_stadium_number","stadium","jcd"]))===jcd&&num(pick(p,["race_number","race_no","rno"]))===rno;});
+      if(!race)throw new Error('この配信に該当レースが見つかりません（開催日・場・R を確認）');
+      var boats=mapBoats(race);
+      if(!boats.length||!boats[0].nat)throw new Error('データ形式が想定と異なります（1レース分のJSONを共有してくれれば即修正）');
+      fillTable(boats);
+      msg.innerHTML='✅ '+STADIUMS[jcd]+' '+rno+'R 自動入力。<b>進入(前づけ)・実測1着率・展示・オッズは手で補強</b>して計算。';
+      render();
+    })
+    .catch(function(e){
+      msg.innerHTML='⚠ 自動取得できませんでした：'+e.message+'<br>※Artifactプレビューは通信制限で取得不可。<b>GitHub Pages/ローカル配信なら取得できます</b>。当面は手入力 or デモボタンで。';
+    });
+});
+
+// デモ：常滑11R（1コース石倉A1・実測1着率72.9% を反映するv2の効き）
+document.getElementById('demo').addEventListener('click',function(){
+  var d=[
+    {c:1,nm:'竹田 辰也',g:'A1',nat:51.4,loc:0,loc3:0,mot:44.2,st:0.14,cwin:72.9,t:6.77},
+    {c:2,nm:'片橋 幸貴',g:'A1',nat:47.7,loc:50.0,loc3:81.3,mot:33.8,st:0.20,cwin:0,t:6.75},
+    {c:3,nm:'森 悠稀',g:'A2',nat:34.8,loc:48.0,loc3:68.0,mot:34.1,st:0.12,cwin:0,t:6.79},
+    {c:4,nm:'小林 泰',g:'A2',nat:40.6,loc:46.4,loc3:60.7,mot:34.1,st:0.14,cwin:0,t:6.77},
+    {c:5,nm:'末永 由楽',g:'A2',nat:33.1,loc:46.7,loc3:73.3,mot:35.0,st:0.14,cwin:0,t:6.77},
+    {c:6,nm:'宮脇 遼太',g:'A1',nat:55.5,loc:33.3,loc3:58.3,mot:29.4,st:0.17,cwin:0,t:6.74}
+  ];
+  var rows=TB.querySelectorAll('tr');
+  d.forEach(function(x,i){var r=rows[i];
+    r.querySelector('.course').value=x.c;r.querySelector('.name').value=x.nm;r.querySelector('.grade').value=x.g;
+    r.querySelector('.nat').value=x.nat;r.querySelector('.loc').value=x.loc;
+    r.querySelector('.loc3').value=x.loc3;r.querySelector('.motor').value=x.mot;
+    r.querySelector('.st').value=x.st;r.querySelector('.cwin').value=x.cwin||'';r.querySelector('.tenji').value=x.t;
+  });
+  render();
+});
+
+// 起動時にデモ(常滑の実例)を表示 → "何ができるか"が一目で分かる状態で開く
+document.getElementById('demo').click();
+window.scrollTo(0,0);
+</script>
+</body>
+</html>
