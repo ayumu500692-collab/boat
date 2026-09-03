@@ -313,16 +313,17 @@ function onOdds(e){
 var MODE='value';
 function renderTri(){
   if(!LAST) return;
-  var p=LAST.p, all=trifecta(p), list, reco;
+  var all=trifecta(LAST.p), list, reco; // all は確率降順
   if(MODE==='honmei'){
-    list=all.slice(0,14);
-    reco='🎯<b>本命モード</b>（鉄板剛・複勝ナオ・回収ジン）：確率上位＝<b>的中率狙い</b>。1着固定＋3着を広めに、堅く回収。低期待値は3点に絞る。';
+    list=all.slice(0,10); // 最上位＝堅い目
+    reco='🎯<b>本命モード</b>（鉄板剛・複勝ナオ・回収ジン）：確率<b>最上位＝堅い目</b>で的中率狙い。1着固定＋3着広め。';
   }else if(MODE==='ana'){
-    list=all.filter(function(t){return (1/t.prob)>=12;}).slice(0,14);
-    reco='💥<b>大穴モード</b>（荒波テツ・万舟リク・歪みケイ）：分岐<b>12倍以上</b>の高配当ゾーンを"起きやすい順"で表示。<b>実オッズが分岐を上回る歪み</b>だけ薄く広く。ただの万舟には乗らない。';
+    list=all.filter(function(t){return (1/t.prob)>=25;}).slice(0,14); // 高配当
+    if(list.length<4) list=all.slice(-14).reverse();
+    reco='💥<b>大穴モード</b>（荒波テツ・万舟リク・歪みケイ）：分岐<b>25倍以上</b>の高配当を"起きやすい順"で。<b>実オッズが分岐を上回る歪み</b>だけ薄く。ただの万舟には乗らない。';
   }else{
-    list=all.slice(0,16);
-    reco='⚖<b>妙味モード</b>（確率屋レン・AIノヴァ）：実オッズ&gt;分岐なら買い、過剰人気は薄く。<b>軸は必ず絡める。</b>妙味が無ければ見送り（それも成果）。';
+    list=all.slice(10,26); // 本命の"次の層"＝妙味が出やすい中位
+    reco='⚖<b>妙味モード</b>（確率屋レン・AIノヴァ）：本命の<b>次の中位層</b>＝妙味(実オッズ>分岐)が出やすい所。過剰人気は薄く、軸は絡める。';
   }
   document.getElementById('tri').innerHTML=list.map(function(t){
     var be=1/t.prob;
