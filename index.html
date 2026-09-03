@@ -416,31 +416,42 @@ function scanDay(){
   var out=document.getElementById('scanout');
   if(ymd.length!==8){out.textContent='日付を選んでください。';return;}
   var y=ymd.slice(0,4);
-  out.textContent='全場スキャン中…（本日の全レースを解析）';
-  fetch('https://boatraceopenapi.github.io/programs/v2/'+y+'/'+ymd+'.json')
+  out.innerHTML='全場スキャン中…（本日の全レースを解析）';
+  // 通信が固まっても"動かない"に見えないよう12秒でタイムアウト
+  var ctl=(typeof AbortController!=='undefined')?new AbortController():null;
+  var timedout=false;
+  var tid=setTimeout(function(){ timedout=true; if(ctl)ctl.abort();
+    out.innerHTML='⚠ 応答が遅く中断しました（回線 or 配信の遅延）。<br>もう一度押すか、少し待って再試行してください。'; },12000);
+  fetch('https://boatraceopenapi.github.io/programs/v2/'+y+'/'+ymd+'.json',ctl?{signal:ctl.signal}:{})
    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
    .then(function(data){
+     clearTimeout(tid); if(timedout)return;
      var progs=data.programs||data.results||(Array.isArray(data)?data:[]);
-     var scored=[];
+     var scored=[], skipped=0;
      progs.forEach(function(pr){
-       var jcd=num(pick(pr,["race_stadium_number","stadium","jcd"])), rno=num(pick(pr,["race_number","race_no","rno"]));
-       var bs=mapBoats(pr); if(!bs.length||!bs[0].nat) return;
-       var wp=winProbs(bs), P=wp.p;
-       var od=P.map(function(v,i){return i;}).sort(function(a,b){return P[b]-P[a];});
-       var top=P[od[0]], gap=top-P[od[1]];
-       var v=(top>=0.60&&gap>=0.22)?'🟢':(top>=0.48?'🟡':'🔴');
-       scored.push({jcd:jcd,rno:rno,top:top,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr});
+       try{
+         var jcd=num(pick(pr,["race_stadium_number","stadium","jcd"])), rno=num(pick(pr,["race_number","race_no","rno"]));
+         var bs=mapBoats(pr); if(!bs.length||!bs[0].nat){skipped++;return;}
+         var wp=winProbs(bs), P=wp.p;
+         var od=P.map(function(v,i){return i;}).sort(function(a,b){return P[b]-P[a];});
+         var top=P[od[0]], gap=top-P[od[1]];
+         var v=(top>=0.60&&gap>=0.22)?'🟢':(top>=0.48?'🟡':'🔴');
+         scored.push({jcd:jcd,rno:rno,top:top,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr});
+       }catch(err){skipped++;}
      });
      scored.sort(function(a,b){var va=a.v==='🟢'?0:a.v==='🟡'?1:2, vb=b.v==='🟢'?0:b.v==='🟡'?1:2; return va!==vb?va-vb:b.top-a.top;});
      DAYRACES=scored;
+     if(!scored.length){out.innerHTML='この日の配信にレースがありませんでした（開催が無い日/日付をご確認ください）。'+(skipped?'<br><span class="note">読み取れなかったデータ形式：'+skipped+'件。1レース分のJSONを共有くれれば直します。</span>':'');return;}
+     var g=scored.filter(function(s){return s.v==='🟢';}).length, ye=scored.filter(function(s){return s.v==='🟡';}).length;
      var pk=scored.filter(function(s){return s.v==='🟢';}).slice(0,10);
-     if(!pk.length) pk=scored.slice(0,8);
-     if(!pk.length){out.textContent='該当レースが見つかりませんでした（開催日を確認）。';return;}
-     out.innerHTML='<b>本日の厳選（🟢＝本命が明確な"打ち候補"）</b><br>'+
-       pk.map(function(s){return '<a href="#" data-i="'+scored.indexOf(s)+'" class="pickrace" style="color:var(--accent)">'+s.v+' '+STADIUMS[s.jcd]+' '+s.rno+'R｜◎'+s.honmei+s.name+' 勝率'+(s.top*100).toFixed(0)+'%</a>';}).join('<br>')+
+     if(!pk.length) pk=scored.slice(0,8); // 🟢ゼロなら勝率上位を暫定表示
+     out.innerHTML='<b>本日の厳選</b>（全'+scored.length+'R：🟢'+g+' 🟡'+ye+' 🔴'+(scored.length-g-ye)+'）'+(g?'':'　<span class="note">※今日は🟢無し→勝率上位を暫定表示</span>')+'<br>'+
+       pk.map(function(s){return '<a href="#" data-i="'+scored.indexOf(s)+'" class="pickrace" style="color:var(--accent);display:inline-block;padding:3px 0">'+s.v+' '+STADIUMS[s.jcd]+' '+s.rno+'R｜◎'+s.honmei+s.name+' 勝率'+(s.top*100).toFixed(0)+'%</a>';}).join('<br>')+
        '<br><span class="note">タップで読み込み→計算。<b>🟢だけ厚く、🟡は軽く、🔴は見送り</b>が回収率を守る。</span>';
    })
-   .catch(function(e){ out.innerHTML='⚠ スキャンできませんでした：'+e.message+'<br>※Artifactは通信制限。<b>Pages/live版(github.io)なら動きます</b>。'; });
+   .catch(function(e){ clearTimeout(tid); if(timedout)return;
+     var abort=(e&&e.name==='AbortError');
+     out.innerHTML='⚠ スキャンできませんでした：'+(abort?'通信中断':(e.message||e))+'<br>※Artifactプレビューは通信制限で不可。<b>ライブ版(…github.io/boat)を開いて</b>ください（URL末尾に ?v7 を付けて最新読込）。'; });
 }
 document.getElementById('scan').addEventListener('click',scanDay);
 document.getElementById('scanout').addEventListener('click',function(e){
