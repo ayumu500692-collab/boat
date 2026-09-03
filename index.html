@@ -68,6 +68,20 @@ button.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--
 .verdict small{display:block;color:var(--mut);font-weight:400;margin-top:2px}
 .grid2{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 small.hint{color:var(--mut);font-size:11px}
+.seer{display:flex;gap:8px;padding:7px 2px;border-bottom:1px solid var(--line);font-size:12.5px;align-items:flex-start}
+.seer:last-child{border-bottom:0}
+.seer .ic{font-size:16px;width:20px;text-align:center;flex-shrink:0}
+.seer .bd{flex:1;min-width:0}
+.seer .nm{font-weight:700;color:var(--ink)}
+.seer .rl{color:var(--mut);font-size:10.5px;font-weight:400;margin-left:3px}
+.seer .op{color:var(--mut);display:block;margin-top:1px}
+.seer .op b{color:var(--ink)}
+.seer .pk{color:var(--accent);font-weight:700}
+.seer.hush{opacity:.55}
+.deskbox{background:var(--surface2);border:1px solid var(--accent);border-radius:10px;padding:10px 12px;font-size:13px}
+.deskbox .dh{color:var(--accent);font-weight:700;margin-bottom:5px}
+.deskbox .ln{margin:3px 0}
+.deskbox .ln b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -117,8 +131,15 @@ small.hint{color:var(--mut);font-size:11px}
     <div class="note" id="topnote"></div>
   </div>
 
+  <div class="card" id="outp" style="display:none">
+    <h2>④ 予想部隊 11人の見立て <span class="tag">10予想家＋統括</span></h2>
+    <div class="note" style="margin:0 0 8px">同じ数字を<b>10人が別々の角度</b>で斬る。<b>割れ方</b>自体が判断材料。最後に統括デスクが束ねる。（オッズを入れるとレン/ケイの見立てが更新）</div>
+    <div id="parade"></div>
+    <div id="desk" style="margin-top:10px"></div>
+  </div>
+
   <div class="card" id="out2" style="display:none">
-    <h2>④ 3連単 分岐オッズ＆妙味判定 <span class="tag man">オッズ手入力</span></h2>
+    <h2>⑤ 3連単 分岐オッズ＆妙味判定 <span class="tag man">オッズ手入力</span></h2>
     <div id="modes">
       <button class="mode" data-m="honmei">🎯 本命</button>
       <button class="mode active" data-m="value">⚖ 妙味</button>
@@ -310,9 +331,75 @@ function render(){
   else {vc='v-bad';vt='🔴 難解・見送り寄り';vs='軸がぐらつく（トップ勝率'+(top*100).toFixed(0)+'%の混戦）。明確な妙味が無ければ見送りが正解（見送りも成果）。';stake='推奨：<b>基本は見送り</b>。打つなら¥500の遊びで1〜2点まで。';}
   document.getElementById('verdict').innerHTML='<div class="verdict '+vc+'">'+vt+'<small>'+vs+'</small><small style="color:var(--ink)">'+stake+'</small></div>';
   document.getElementById('out').style.display='';
+  renderParade();
+  document.getElementById('outp').style.display='';
   renderTri();
   document.getElementById('out2').style.display='';
   window.scrollTo({top:document.getElementById('out').offsetTop-10,behavior:'smooth'});
+}
+
+// ===== 予想部隊 11人の見立て（同じ数字を別angleで斬る）=====
+function renderParade(){
+  if(!LAST) return;
+  var boats=LAST.boats, p=LAST.p, pr=placeRates(p), n=boats.length, ix=boats.map(function(b,i){return i;});
+  var ord=ix.slice().sort(function(a,b){return p[b]-p[a];});
+  var nm=function(i){return (i+1)+(boats[i].name||'艇'+(i+1));};
+  var cof=function(i){return boats[i].course||i+1;};
+  var l3=function(i){return boats[i].loc3||boats[i].loc||0;};
+  var c1=-1; for(var i=0;i<n;i++){if(cof(i)===1){c1=i;break;}} if(c1<0)c1=0;
+  var maegumi=boats.some(function(b,i){return cof(i)!==(i+1);});
+  var maxMotor=ix.slice().sort(function(a,b){return (boats[b].motor||0)-(boats[a].motor||0);})[0];
+  var maxLoc3=ix.slice().sort(function(a,b){return l3(b)-l3(a);})[0];
+  var outer=ix.filter(function(i){return cof(i)>=3;});
+  var anaHead=outer.length?outer.slice().sort(function(a,b){return (strength(boats[b])+(boats[b].motor||0)/200)-(strength(boats[a])+(boats[a].motor||0)/200);})[0]:ord[1];
+  var tj=boats.map(function(b){return b.tenji||0;}), hasTenji=tj.filter(function(v){return v>0;}).length>=3;
+  var fastTj=hasTenji?ix.filter(function(i){return boats[i].tenji>0;}).sort(function(a,b){return boats[a].tenji-boats[b].tenji;})[0]:-1;
+  var mvym=[], oddsCount=0;
+  Array.prototype.forEach.call(document.querySelectorAll('#tri tr'),function(tr){
+    var oi=tr.querySelector('.odds'), od=oi?(+oi.value||0):0, prob=+tr.getAttribute('data-p')||0;
+    if(od>0){oddsCount++; var ev=od*prob; if(ev>=1.1) mvym.push({c:tr.querySelector('b').textContent,ev:ev,od:od});}
+  });
+  mvym.sort(function(a,b){return b.ev-a.ev;});
+  var hasOdds=oddsCount>0, top=p[ord[0]], gap=top-p[ord[1]], pc1=p[c1];
+  var quality=(top>=0.60&&gap>=0.22)?'堅い':(top>=0.48?'中庸':'難解');
+  var S=[]; // {ic,nm,rl,op,hush}
+  S.push({ic:'🅰',nm:'鉄板 剛',rl:'本命・イン逃げ',hush:pc1<0.42,
+    op:'◎<span class="pk">'+nm(c1)+'</span> 1コース勝率'+(pc1*100).toFixed(0)+'%'+(boats[c1].cwin?'・実測1着率'+boats[c1].cwin+'%':'')+'。'+(pc1>=0.55?'イン飛ばす理由なし＝ここで獲る':pc1>=0.42?'1は取りたいが盤石でない。相手は2・3コース':'1が弱い＝本命党でも手控え')});
+  S.push({ic:'🅱',nm:'荒波 テツ',rl:'穴・まくり差し',hush:quality==='堅い'&&(boats[anaHead].motor||0)<38,
+    op:'頭は<span class="pk">'+nm(anaHead)+'</span>（'+cof(anaHead)+'コース M'+(boats[anaHead].motor||0).toFixed(0)+'%）。1号艇の差されを突く。1は2-3着へ飛ばす'});
+  S.push({ic:'🅲',nm:'確率屋 レン',rl:'期待値',hush:!hasOdds,
+    op:hasOdds?(mvym.length?'妙味'+mvym.length+'点。最有力 <span class="pk">'+mvym[0].c+'</span>（EV'+mvym[0].ev.toFixed(2)+'）に寄せる':'入力オッズにEV>1なし＝<b>買う理由なし・見送り</b>'):'オッズ未入力＝判断保留。安い本命は切る。⑤で実オッズを入れて'});
+  S.push({ic:'🅳',nm:'時計 ハヤト',rl:'展示・直前',hush:!hasTenji,
+    op:hasTenji?(fastTj===ord[0]?'展示最速＝<span class="pk">'+nm(fastTj)+'</span>('+boats[fastTj].tenji+')。本命の足も本物':'展示最速は<span class="pk">'+nm(fastTj)+'</span>('+boats[fastTj].tenji+')。数字上位と食い違い＝<b>格上げ/買い足し候補</b>'):'展示T未入力＝直前で上書きする流儀。今は数字通り'});
+  S.push({ic:'🅴',nm:'番組 タクミ',rl:'展開・隊形',hush:false,
+    op:maegumi?'前づけ検知＝隊形が乱れる。決まり手が読みにくい＝<b>一発警戒</b>':'枠なり進入＝素直。頭は'+nm(c1)+'軸、スロー先マイが本線'});
+  S.push({ic:'🅵',nm:'AI ノヴァ',rl:'純確率',hush:false,
+    op:'モデル出力：1着 <span class="pk">'+nm(ord[0])+'</span> '+(top*100).toFixed(1)+'%。連対上位 '+ord.slice(0,3).map(function(i){return i+1;}).join('・')});
+  S.push({ic:'🅶',nm:'複勝 ナオ',rl:'当地3連・複勝',hush:l3(maxLoc3)<50,
+    op:'3着に必ず <span class="pk">'+nm(maxLoc3)+'</span>（当地3連'+l3(maxLoc3).toFixed(0)+'%・複勝'+(pr.top3[maxLoc3]*100).toFixed(0)+'%）＝ヒモから外すな'});
+  S.push({ic:'🅷',nm:'回収 ジン',rl:'資金・見送り',hush:quality==='難解',
+    op:(quality==='堅い'?'打ってよし。上限内で厚く':quality==='中庸'?'3点以下 or 見送り。ベタ張り禁止':'<b>見送り推奨</b>。打つなら¥500遊びで1〜2点')+'。'+(hasOdds?(mvym.length?'':'EV>1が無い＝今は打たない'):'オッズ突合前に増額するな')});
+  S.push({ic:'🅸',nm:'万舟 リク',rl:'機力・一撃',hush:(maxMotor===c1)||(boats[maxMotor].motor||0)<38,
+    op:(maxMotor===c1)?'機力トップは1号艇 '+nm(maxMotor)+'(M'+(boats[maxMotor].motor||0).toFixed(0)+'%)＝逃げ濃厚。万舟の芽は薄い':'頭に<span class="pk">'+nm(maxMotor)+'</span>（M'+(boats[maxMotor].motor||0).toFixed(0)+'%）。級別より機力。1は2-3着へ'});
+  S.push({ic:'🅹',nm:'歪み ケイ',rl:'オッズ乖離',hush:!hasOdds,
+    op:hasOdds?(mvym.length?'歪み(実>分岐)：'+mvym.slice(0,3).map(function(m){return '<span class="pk">'+m.c+'</span>('+m.od.toFixed(1)+'倍)';}).join('・')+' だけ獲る':'全目フェア〜過剰人気＝歪み無し・見送り'):'実オッズ入れて。可能性でなく<b>歪み(実>分岐)だけ</b>買う'});
+  document.getElementById('parade').innerHTML=S.map(function(s){
+    return '<div class="seer'+(s.hush?' hush':'')+'"><span class="ic">'+s.ic+'</span><span class="bd"><span class="nm">'+s.nm+'</span><span class="rl">'+s.rl+'</span><span class="op">'+s.op+'</span></span></div>';
+  }).join('');
+  // 統括デスク 藤堂玄
+  var honmAgree=(c1===ord[0]), motorAgree=(maxMotor===ord[0]);
+  var meivi=hasOdds?(mvym.length?'<span class="pk">'+mvym[0].c+'</span>（実'+mvym[0].od.toFixed(1)+'/EV'+mvym[0].ev.toFixed(2)+'）':'該当なし＝妙味線は<b>見送り</b>'):'オッズ入力待ち';
+  var call;
+  if(quality==='堅い'&&honmAgree) call='<b>本命濃厚。</b>'+nm(ord[0])+'を頭固定→'+nm(ord[1])+'・'+nm(ord[2])+'を厚く。穴党の'+nm(anaHead)+'は3着ヒモ/保険1枚まで。軸は動かさない。';
+  else if(quality==='堅い') call='<b>本命堅いが機力上位('+nm(maxMotor)+')が別。</b>'+nm(ord[0])+'頭固定＋'+nm(maxMotor)+'を2-3着に必ず入れる。';
+  else if(quality==='中庸') call='<b>割れ気味。</b>妙味目だけ軽く（'+meivi+'）、無ければ見送り。軸('+nm(ord[0])+')は後付けで動かさない。3点以下。';
+  else call='<b>難解＝各家の軸がバラけ。見送りが最善。</b>触るなら'+nm(ord[0])+'-'+nm(ord[1])+'流しを¥500で1〜2点。';
+  document.getElementById('desk').innerHTML='<div class="deskbox"><div class="dh">🎩 統括デスク 藤堂 玄 ＝ 最終決定</div>'+
+    '<div class="ln"><b>レース質：</b>'+quality+'（トップ勝率'+(top*100).toFixed(0)+'%・2番手と'+(gap*100).toFixed(0)+'pt差）'+(maegumi?' ／ 前づけ有り＝荒れ含み':'')+'</div>'+
+    '<div class="ln"><b>本命線：</b>'+nm(ord[0])+' → '+nm(ord[1])+'・'+nm(ord[2])+'（剛・ナオ・ノヴァ）</div>'+
+    '<div class="ln"><b>妙味線：</b>'+meivi+'（レン・ケイ）</div>'+
+    '<div class="ln"><b>穴線：</b>'+nm(anaHead)+' 頭（テツ・リク）'+((boats[anaHead].motor||0)>=42?'＝機力'+(boats[anaHead].motor||0).toFixed(0)+'%で一発あり':'＝機力平凡で薄く')+'</div>'+
+    '<div class="ln" style="margin-top:5px;padding-top:5px;border-top:1px solid var(--line)"><b>▶ 最終：</b>'+call+'</div></div>';
 }
 function onOdds(e){
   if(!e.target.classList.contains('odds'))return;
@@ -324,6 +411,7 @@ function onOdds(e){
   if(ev>=1.1){evc.className='ev plus';jd.innerHTML='<span class="plus">◎妙味(買い)</span>';tr.classList.add('mvym');}
   else if(ev>=0.95){evc.className='ev';jd.textContent='ほぼフェア';tr.classList.remove('mvym');}
   else {evc.className='ev minus';jd.innerHTML='<span class="minus">過剰人気</span>';tr.classList.remove('mvym');}
+  if(LAST) renderParade(); // オッズ入力でレン/ケイ/デスクの見立てを更新
 }
 // ===== 狙いモード（予想家の意見をアプリに反映）=====
 var MODE='value', NPT=8; // NPT=表示点数(絞り込み)
