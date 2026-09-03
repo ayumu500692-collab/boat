@@ -94,6 +94,8 @@ small.hint{color:var(--mut);font-size:11px}
       <span class="note" style="margin:0">荒れるほどイン有利が薄れ、好機力の外・センターが台頭。</span>
     </div>
     <div class="note" id="fetchmsg">会場・日付・Rを選んで「取得」。公式データ配信(Boatrace Open API)から<b>出走表(級別・全国/当地2連3連・モーター・ST)</b>を自動入力。※実測1着率・展示・オッズは配信に無いので手入力で補強（下記）。</div>
+    <button class="btn ghost" id="scan" style="margin-top:8px">🔎 本日の厳選レースを探す（全場スキャン）</button>
+    <div id="scanout" class="note" style="margin-top:8px"></div>
   </div>
 
   <div class="card">
@@ -136,6 +138,8 @@ small.hint{color:var(--mut);font-size:11px}
     <div class="note" style="margin:0 0 8px">「分岐オッズ」＝1÷確率＝<b>買っていい最低倍率</b>。賭けサイトの実オッズがこれより高ければ買い（打ち込めばEVも自動計算）。<b class="plus">EV&gt;1=妙味</b> / <span class="minus">EV&lt;1=過剰人気</span>。</div>
     <div style="overflow-x:auto"><table class="tri"><thead><tr><th>買い目</th><th>確率</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>判定</th></tr></thead><tbody id="tri"></tbody></table></div>
     <div class="note" id="reco"></div>
+    <button class="btn ghost" id="nagashi" style="margin-top:10px">🎯 軸2艇→3着流し（頭を動かさず配当を稼ぐ）</button>
+    <div id="nagashiout" class="note" style="margin-top:8px"></div>
     <div class="grid2" style="margin:10px 0 0;padding-top:10px;border-top:1px solid var(--line)">
       <label class="mini">💰 予算¥ <input id="budget" type="number" value="3000" step="500" style="width:88px"></label>
       <button class="btn" id="alloc" style="width:auto;margin:0;padding:8px 16px">資金配分を提案</button>
@@ -384,6 +388,68 @@ function allocate(){
 document.getElementById('alloc').addEventListener('click',allocate);
 document.getElementById('water').addEventListener('change',function(){ if(LAST)render(); });
 document.getElementById('npts').addEventListener('change',function(){ NPT=+this.value||8; renderTri(); });
+
+// ===== 軸2艇→3着流し（頭を動かさず配当を稼ぐ＝"少しのズレ"を防ぐ）=====
+function nagashi(){
+  var out=document.getElementById('nagashiout');
+  if(!LAST){out.textContent='先に「数値化して計算」してください。';return;}
+  var p=LAST.p, boats=LAST.boats;
+  var ord=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
+  var a=ord[0], b=ord[1], others=ord.slice(2);
+  var nm=function(i){return (i+1)+(boats[i].name||'');};
+  var rows=[];
+  others.forEach(function(c){
+    rows.push({combo:[a+1,b+1,c+1],prob:p[a]*(p[b]/(1-p[a]))*(p[c]/(1-p[a]-p[b]))});
+    rows.push({combo:[b+1,a+1,c+1],prob:p[b]*(p[a]/(1-p[b]))*(p[c]/(1-p[b]-p[a]))});
+  });
+  rows.sort(function(x,y){return (1/y.prob)-(1/x.prob);}); // 高配当順
+  out.innerHTML='<b>軸2艇＝'+nm(a)+'・'+nm(b)+'（実力ワンツー・頭は動かさない）</b><br>3着を残り4艇に流す（人気薄ほど高配当＝妙味の源泉）：<br>'+
+    rows.map(function(r){return '<b>'+r.combo.join('-')+'</b> <span class="note">分岐'+(1/r.prob).toFixed(0)+'倍</span>';}).join('　')+
+    '<br><span class="note">※ここから実オッズ&gt;分岐の目を厚く。<b>3着の人気薄(高分岐)</b>が高配当の狙い（今日の4-3-5型）。頭を穴にするより、軸固定で3着を振るのが正解。</span>';
+}
+document.getElementById('nagashi').addEventListener('click',nagashi);
+
+// ===== 本日の厳選レース（全場スキャン→🟢打ち候補をピック）=====
+var DAYRACES=[];
+function scanDay(){
+  var ymd=(document.getElementById('ymd').value||'').replace(/-/g,'');
+  var out=document.getElementById('scanout');
+  if(ymd.length!==8){out.textContent='日付を選んでください。';return;}
+  var y=ymd.slice(0,4);
+  out.textContent='全場スキャン中…（本日の全レースを解析）';
+  fetch('https://boatraceopenapi.github.io/programs/v2/'+y+'/'+ymd+'.json')
+   .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+   .then(function(data){
+     var progs=data.programs||data.results||(Array.isArray(data)?data:[]);
+     var scored=[];
+     progs.forEach(function(pr){
+       var jcd=num(pick(pr,["race_stadium_number","stadium","jcd"])), rno=num(pick(pr,["race_number","race_no","rno"]));
+       var bs=mapBoats(pr); if(!bs.length||!bs[0].nat) return;
+       var wp=winProbs(bs), P=wp.p;
+       var od=P.map(function(v,i){return i;}).sort(function(a,b){return P[b]-P[a];});
+       var top=P[od[0]], gap=top-P[od[1]];
+       var v=(top>=0.60&&gap>=0.22)?'🟢':(top>=0.48?'🟡':'🔴');
+       scored.push({jcd:jcd,rno:rno,top:top,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr});
+     });
+     scored.sort(function(a,b){var va=a.v==='🟢'?0:a.v==='🟡'?1:2, vb=b.v==='🟢'?0:b.v==='🟡'?1:2; return va!==vb?va-vb:b.top-a.top;});
+     DAYRACES=scored;
+     var pk=scored.filter(function(s){return s.v==='🟢';}).slice(0,10);
+     if(!pk.length) pk=scored.slice(0,8);
+     if(!pk.length){out.textContent='該当レースが見つかりませんでした（開催日を確認）。';return;}
+     out.innerHTML='<b>本日の厳選（🟢＝本命が明確な"打ち候補"）</b><br>'+
+       pk.map(function(s){return '<a href="#" data-i="'+scored.indexOf(s)+'" class="pickrace" style="color:var(--accent)">'+s.v+' '+STADIUMS[s.jcd]+' '+s.rno+'R｜◎'+s.honmei+s.name+' 勝率'+(s.top*100).toFixed(0)+'%</a>';}).join('<br>')+
+       '<br><span class="note">タップで読み込み→計算。<b>🟢だけ厚く、🟡は軽く、🔴は見送り</b>が回収率を守る。</span>';
+   })
+   .catch(function(e){ out.innerHTML='⚠ スキャンできませんでした：'+e.message+'<br>※Artifactは通信制限。<b>Pages/live版(github.io)なら動きます</b>。'; });
+}
+document.getElementById('scan').addEventListener('click',scanDay);
+document.getElementById('scanout').addEventListener('click',function(e){
+  var a=e.target.closest('.pickrace'); if(!a)return; e.preventDefault();
+  var s=DAYRACES[+a.getAttribute('data-i')]; if(!s)return;
+  document.getElementById('jcd').value=s.jcd; document.getElementById('rno').value=s.rno;
+  fillTable(mapBoats(s.prog)); render();
+  window.scrollTo({top:document.getElementById('out').offsetTop-10,behavior:'smooth'});
+});
 
 /* ========== 公式データ自動取得（Boatrace Open API） ========== */
 var STADIUMS=["","桐生","戸田","江戸川","平和島","多摩川","浜名湖","蒲郡","常滑","津","三国","びわこ","住之江","尼崎","鳴門","丸亀","児島","宮島","徳山","下関","若松","芦屋","福岡","唐津","大村"];
