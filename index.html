@@ -93,6 +93,15 @@ small.hint{color:var(--mut);font-size:11px}
 .bt.b-warn{color:var(--warn);border-color:var(--warn);background:rgba(242,179,61,.12)}
 .bt.b-stop{color:var(--minus);border-color:var(--minus);background:rgba(242,86,90,.12)}
 .bt.b-mid{color:var(--mut);border-color:var(--line)}
+.marks{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:6px 12px;margin-bottom:10px}
+.mk{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:15px;border-bottom:1px solid var(--line)}
+.mk:last-child{border-bottom:0}
+.mkb{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0}
+.mk-honmei{background:rgba(77,163,255,.18);color:var(--accent);border:2px solid var(--accent)}
+.mk-chu{background:rgba(242,179,61,.16);color:var(--warn);border:2px solid var(--warn)}
+.mk-ana{background:rgba(242,86,90,.16);color:var(--minus);border:2px solid var(--minus)}
+.mkl{width:36px;color:var(--mut);font-size:11px;flex-shrink:0}
+.mk b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -429,8 +438,13 @@ function triProb(a,b,c){
 }
 function renderFinal(){
   if(!LAST)return;
-  var f=pickFinal(), boats=LAST.boats, nm=function(i){return (i+1)+(boats[i].name||'');};
-  document.getElementById('finalhead').innerHTML='<span style="color:var(--accent)">◎</span> <b>'+nm(f.honmei)+'</b>　<span style="color:var(--warn)">○</span> '+nm(f.o1)+'・'+nm(f.o2)+'　<span style="color:var(--minus)">穴</span> '+nm(f.ana);
+  var f=pickFinal(), boats=LAST.boats, nm=function(i){return (i+1)+' '+(boats[i].name||('艇'+(i+1)));};
+  document.getElementById('finalhead').innerHTML=
+    '<div class="marks">'+
+    '<div class="mk"><span class="mkb mk-honmei">◎</span><span class="mkl">本命</span><span><b>'+nm(f.honmei)+'</b> <span class="note">勝率'+(LAST.p[f.honmei]*100).toFixed(0)+'%</span></span></div>'+
+    '<div class="mk"><span class="mkb mk-chu">○</span><span class="mkl">中堅</span><span><b>'+nm(f.o1)+'</b>　<b>'+nm(f.o2)+'</b></span></div>'+
+    '<div class="mk"><span class="mkb mk-ana">▲</span><span class="mkl">穴</span><span><b>'+nm(f.ana)+'</b> <span class="note">一発（本命が飛んだ時）</span></span></div>'+
+    '</div>';
   var H=f.honmei,A=f.o1,B=f.o2,X=f.ana;
   var all=[
     {c:[H,A,B],r:'◎-○-○',leg:'nige'},
