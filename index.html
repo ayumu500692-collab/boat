@@ -142,15 +142,27 @@ small.hint{color:var(--mut);font-size:11px}
     <div class="note" id="topnote"></div>
   </div>
 
+  <div class="card" id="outf" style="display:none">
+    <h2>④ 🎯 これだけ見ればいい買い目 <span class="tag">◎→○→穴で絞る</span></h2>
+    <div id="finalhead" style="font-size:15px;margin-bottom:6px"></div>
+    <div class="grid2" style="margin:6px 0 8px">
+      <label class="mini">点数 <select id="fpts"><option value="3">3点</option><option value="5" selected>5点</option><option value="7">7点</option></select></label>
+      <label class="mini">💰予算¥ <input id="fbudget" type="number" value="10000" step="500" style="width:82px"></label>
+    </div>
+    <div style="overflow-x:auto"><table class="tri"><thead><tr><th>段</th><th>買い目</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>¥配分</th></tr></thead><tbody id="ftri"></tbody></table></div>
+    <div class="note" id="fnote"></div>
+    <div class="note">実オッズを入れると<b>EV≥1.1(妙味)だけに絞って¥配分</b>。妙味ゼロなら見送り。下の「予想部隊」は根拠（見なくてもOK）。</div>
+  </div>
+
   <div class="card" id="outp" style="display:none">
-    <h2>④ 予想部隊の見立て <span class="tag">10予想家＋統括＋最高顧問</span></h2>
-    <div class="note" style="margin:0 0 8px">同じ数字を<b>10人が別々の角度</b>で斬る。<b>割れ方</b>自体が判断材料。最後に統括デスクが束ねる。（オッズを入れるとレン/ケイの見立てが更新）</div>
+    <h2>⑤ 予想部隊の見立て（根拠） <span class="tag">10予想家＋統括＋最高顧問</span></h2>
+    <div class="note" style="margin:0 0 8px">④の買い目の<b>根拠</b>。同じ数字を10人が別角度で斬り、統括デスク＋最高顧問が束ねる。じっくり見たい時だけどうぞ。</div>
     <div id="parade"></div>
     <div id="desk" style="margin-top:10px"></div>
   </div>
 
   <div class="card" id="out2" style="display:none">
-    <h2>⑤ 3連単 分岐オッズ＆妙味判定 <span class="tag man">オッズ手入力</span></h2>
+    <h2>⑥ 3連単 全確率表（詳細・任意） <span class="tag man">オッズ手入力</span></h2>
     <div id="modes">
       <button class="mode" data-m="honmei">🎯 本命</button>
       <button class="mode active" data-m="value">⚖ 妙味</button>
@@ -392,12 +404,78 @@ function render(){
   else {vc='v-bad';vt='🔴 難解・見送り寄り';vs='軸がぐらつく（トップ勝率'+(top*100).toFixed(0)+'%の混戦）。明確な妙味が無ければ見送りが正解（見送りも成果）。';stake='推奨：<b>基本は見送り</b>。打つなら¥500の遊びで1〜2点まで。';}
   document.getElementById('verdict').innerHTML='<div class="verdict '+vc+'">'+vt+'<small>'+vs+'</small><small style="color:var(--ink)">'+stake+'</small></div>';
   document.getElementById('out').style.display='';
+  renderFinal();
+  document.getElementById('outf').style.display='';
   renderParade();
   document.getElementById('outp').style.display='';
   renderTri();
   document.getElementById('out2').style.display='';
   window.scrollTo({top:document.getElementById('out').offsetTop-10,behavior:'smooth'});
 }
+
+// ===== 🎯 最終買い目（◎→○→穴で1枚に絞る）=====
+var FINPTS=[];
+function pickFinal(){
+  var boats=LAST.boats,p=LAST.p,atk=LAST.atk||[],ix=boats.map(function(b,i){return i;});
+  var ord=ix.slice().sort(function(a,b){return p[b]-p[a];});
+  var used={}; used[ord[0]]=1; used[ord[1]]=1; used[ord[2]]=1;
+  var cand=ix.filter(function(i){return !used[i];}).sort(function(a,b){return ((atk[b]||0)+strength(boats[b])/2)-((atk[a]||0)+strength(boats[a])/2);});
+  return {honmei:ord[0],o1:ord[1],o2:ord[2],ana:cand.length?cand[0]:ord[3]};
+}
+function triProb(a,b,c){
+  var p=LAST.p,w=LAST.w||p,W=w.reduce(function(s,x){return s+x;},0);
+  var w2=W-w[a], w3=w2-w[b]; if(w2<=0||w3<=0)return 0;
+  return p[a]*(w[b]/w2)*(w[c]/w3);
+}
+function renderFinal(){
+  if(!LAST)return;
+  var f=pickFinal(), boats=LAST.boats, nm=function(i){return (i+1)+(boats[i].name||'');};
+  document.getElementById('finalhead').innerHTML='<span style="color:var(--accent)">◎</span> <b>'+nm(f.honmei)+'</b>　<span style="color:var(--warn)">○</span> '+nm(f.o1)+'・'+nm(f.o2)+'　<span style="color:var(--minus)">穴</span> '+nm(f.ana);
+  var H=f.honmei,A=f.o1,B=f.o2,X=f.ana;
+  var all=[
+    {c:[H,A,B],r:'◎-○-○',leg:'nige'},
+    {c:[H,B,A],r:'◎-○-○',leg:'nige'},
+    {c:[H,A,X],r:'◎-○-穴',leg:'nige'},
+    {c:[H,B,X],r:'◎-○-穴',leg:'nige'},
+    {c:[X,H,A],r:'穴-◎ 一発',leg:'tobi'},
+    {c:[A,H,B],r:'○-◎ 逆転',leg:'tobi'},
+    {c:[X,H,B],r:'穴-◎ 一発',leg:'tobi'}
+  ];
+  var npt=+document.getElementById('fpts').value||5;
+  FINPTS=all.slice(0,npt).map(function(o){var pr=triProb(o.c[0],o.c[1],o.c[2]);return {combo:o.c,role:o.r,leg:o.leg,prob:pr,be:pr>0?1/pr:9999};});
+  document.getElementById('ftri').innerHTML=FINPTS.map(function(o,i){
+    return '<tr data-i="'+i+'"><td class="note" style="text-align:left;white-space:nowrap">'+o.role+'</td><td><b>'+o.combo.map(function(x){return x+1;}).join('-')+'</b></td><td>'+o.be.toFixed(1)+'</td>'+
+      '<td><input type="number" class="fodds" step="0.1" placeholder="入力" style="width:56px"></td><td class="fev">–</td><td class="fyen" style="white-space:nowrap">–</td></tr>';
+  }).join('');
+  allocFinal();
+}
+function allocFinal(){
+  if(!FINPTS.length)return;
+  var budget=+document.getElementById('fbudget').value||0;
+  var rows=Array.prototype.slice.call(document.querySelectorAll('#ftri tr')), hasOdds=false;
+  var items=rows.map(function(tr){
+    var o=FINPTS[+tr.getAttribute('data-i')], od=+tr.querySelector('.fodds').value||0; if(od>0)hasOdds=true;
+    return {tr:tr,o:o,od:od,ev:od>0?od*o.prob:0};
+  });
+  items.forEach(function(it){
+    var evc=it.tr.querySelector('.fev');
+    if(it.od>0){evc.textContent=it.ev.toFixed(2);evc.className='fev '+(it.ev>=1.1?'plus':it.ev>=0.95?'':'minus');}
+    else{evc.textContent='–';evc.className='fev';}
+  });
+  var fund= hasOdds? items.filter(function(it){return it.ev>=1.1;}) : items;
+  if(hasOdds && !fund.length){ items.forEach(function(it){it.tr.querySelector('.fyen').textContent='–';}); document.getElementById('fnote').innerHTML='<b class="minus">妙味(EV≥1.1)の目なし → 見送り推奨。</b>この5点は今のオッズだと過剰人気。触らないのが正解。'; return; }
+  var wt=function(it){return hasOdds?it.o.prob*Math.max(it.ev-1,0.02):it.o.prob;};
+  var nige=fund.filter(function(it){return it.o.leg==='nige';}), tobi=fund.filter(function(it){return it.o.leg==='tobi';});
+  var bn=budget*0.6, bt=budget*0.4; if(!nige.length){bt=budget;bn=0;} if(!tobi.length){bn=budget;bt=0;}
+  function alloc(list,amt){var sw=list.reduce(function(s,it){return s+wt(it);},0)||1;list.forEach(function(it){it.yen=Math.max(100,Math.round(amt*wt(it)/sw/100)*100);});}
+  if(nige.length)alloc(nige,bn); if(tobi.length)alloc(tobi,bt);
+  items.forEach(function(it){if(fund.indexOf(it)<0)it.yen=0;});
+  var total=0; items.forEach(function(it){it.tr.querySelector('.fyen').textContent=it.yen?('¥'+it.yen):'–'; total+=it.yen||0;});
+  document.getElementById('fnote').innerHTML=(hasOdds?'妙味'+fund.length+'点に配分。':'※オッズ未入力→確率で仮配分。')+' 計¥'+total+'（逃げ'+Math.round(bn/(budget||1)*100)+'：飛び'+Math.round(bt/(budget||1)*100)+'）。<b>取り返しの増額は禁止。</b>';
+}
+document.getElementById('fpts').addEventListener('change',renderFinal);
+document.getElementById('ftri').addEventListener('input',function(e){ if(e.target.classList.contains('fodds'))allocFinal(); });
+document.getElementById('fbudget').addEventListener('input',allocFinal);
 
 // ===== 予想部隊 11人の見立て（同じ数字を別angleで斬る）=====
 function renderParade(){
