@@ -138,7 +138,7 @@ small.hint{color:var(--mut);font-size:11px}
     <h2>② 出走表（自動＋手修正）</h2>
     <div style="overflow-x:auto">
       <table id="inp"><thead><tr>
-        <th>コース</th><th>選手<span class="tag auto">自</span></th><th>級別</th><th>全国2連<span class="tag auto">自</span></th><th>当地2連<span class="tag auto">自</span></th><th>当地3連<span class="tag auto">自</span></th><th>M2連<span class="tag auto">自</span></th><th>平均ST<span class="tag auto">自</span></th><th>実測1着率<span class="tag man">手</span></th><th>展示T<span class="tag man">手</span></th><th>決手%<span class="tag man">手</span></th><th>F/L<span class="tag auto">自</span></th>
+        <th>コース</th><th>選手<span class="tag auto">自</span></th><th>級別</th><th>全国2連<span class="tag auto">自</span></th><th>当地2連<span class="tag auto">自</span></th><th>当地3連<span class="tag auto">自</span></th><th>M2連<span class="tag auto">自</span></th><th>平均ST<span class="tag auto">自</span></th><th>実測1着率<span class="tag man">手</span></th><th>展示T<span class="tag man">手</span></th><th>決手%<span class="tag man">手</span></th><th>F/L<span class="tag auto">自</span></th><th>今節<span class="tag man">手</span></th>
       </tr></thead><tbody></tbody></table>
     </div>
     <div class="note"><b>コース＝進入</b>（前づけがあれば書き換える＝v2の要）。<b>実測1着率</b>＝「1コース1着率」等（本命の堅さを最も左右）。<b>決手%</b>＝決まり手データ（<b>1号艇＝差され率</b>／<b>2〜6号艇＝攻め率＝差し＋まくり＋まくり差し</b>）。空欄なら<b>ST・機力・コースから自動推定</b>。すべて任意・補正であり実力(2連率)は覆さない。</div>
@@ -245,6 +245,10 @@ function tenjiAdj(boats){ // 展示Tの微補正(±0.03)
     return (r-0.5)*0.06;
   });
 }
+// 今節成績(平均着順)の微補正(±0.05)。確定データ・空欄なら効かない
+function formAdj(boats){
+  return boats.map(function(b){var a=+b.kon||0; if(!a)return 0; return clamp((3.4-a)/2.6,-1,1)*0.05;});
+}
 // 軸2: 水面条件でコース基礎勝率を可変化＋荒れ時は好機力を加点
 function waterCB(w){
   if(w==='rough') return [0.47,0.15,0.13,0.125,0.08,0.045];
@@ -279,10 +283,10 @@ function winProbs(boats,cfg,waterOverride){
   if(vi<1){ cb[3]*=1+(1-vi)*0.9; cb[2]*=1+(1-vi)*0.6; }
   else if(vi>1){ cb[3]*=1-(vi-1)*0.5; cb[2]*=1-(vi-1)*0.3; }
   var mBonus=w==='rough'?0.14:(w==='mid'?0.06:0); // 荒れ×好機力の相互作用
-  var adj=tenjiAdj(boats);
+  var adj=tenjiAdj(boats), adf=formAdj(boats);
   var km=kimarite(boats);
   var str=boats.map(function(b,i){
-    var s=Math.max(0.05,strength(b)+adj[i]);
+    var s=Math.max(0.05,strength(b)+adj[i]+adf[i]);
     if(mBonus>0) s*=(1+mBonus*clamp((b.motor-35)/20,0,1)); // M35超で加点、荒れほど大
     return s;
   });
@@ -471,6 +475,7 @@ function reasons(b,km){
     else if(c>=3 && km.atk>=0.52) r.push('攻め力'+(km.atk*100).toFixed(0)+'%'+(b.km>0?'':'(推定)')+'＝差し/まくりの脅威');
   }
   if(b.fl){var fu=(''+b.fl).toUpperCase(); if(/F/.test(fu))r.push(fu+'＝フライング持ちでスタート自重'+(c===1?'（逃げ崩れ注意）':'')); else if(/L/.test(fu))r.push(fu+'＝出遅れ持ち');}
+  if(b.kon>0){ if(b.kon<=2.3)r.push('今節平均'+b.kon+'着＝好調'); else if(b.kon>=4.0)r.push('今節平均'+b.kon+'着＝不調'); }
   if(c===1) r.push('1コース＝逃げ本線');
   else if(c>=4 && b.motor>=40) r.push('外枠×好機力＝一撃の目');
   if(!r.length) r.push(b.grade+'・目立った強調点なし');
@@ -493,7 +498,8 @@ for(var i=0;i<6;i++){
     '<td><input type="number" class="cwin" step="0.1" placeholder="任意"></td>'+
     '<td><input type="number" class="tenji" step="0.01" placeholder="任意"></td>'+
     '<td><input type="number" class="km" step="0.1" placeholder="任意"></td>'+
-    '<td><input type="text" class="fl" placeholder="F/L" style="width:44px"></td>';
+    '<td><input type="text" class="fl" placeholder="F/L" style="width:44px"></td>'+
+    '<td><input type="number" class="kon" step="0.1" placeholder="任意" style="width:48px"></td>';
   TB.appendChild(tr);
 }
 function readBoats(){
@@ -502,7 +508,7 @@ function readBoats(){
     return {course:+q('.course').value||0,name:q('.name').value||'',grade:q('.grade').value,nat:+q('.nat').value||0,
       loc:+q('.loc').value||0,loc3:+q('.loc3').value||0,motor:+q('.motor').value||0,
       st:+q('.st').value||0.18,cwin:+q('.cwin').value||0,tenji:+q('.tenji').value||0,km:+q('.km').value||0,
-      fl:(q('.fl')?q('.fl').value:'')||''};
+      fl:(q('.fl')?q('.fl').value:'')||'',kon:(q('.kon')?+q('.kon').value:0)||0};
   });
 }
 function fmtC(c){return c.join('-');}
