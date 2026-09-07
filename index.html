@@ -129,6 +129,7 @@ small.hint{color:var(--mut);font-size:11px}
     </div>
     <div class="note" id="fetchmsg">会場・日付・Rを選んで「取得」。公式データ配信(Boatrace Open API)から<b>出走表(級別・全国/当地2連3連・モーター・ST)</b>を自動入力。※実測1着率・展示・オッズは配信に無いので手入力で補強（下記）。</div>
     <button class="btn ghost" id="scan" style="margin-top:8px">🔎 本日の厳選レースを探す（全場スキャン）</button>
+    <button class="btn ghost" id="gori" style="margin-top:8px">🔥 ゴリ押し候補を探す（信頼度が高い本命）</button>
     <button class="btn ghost" id="makuri" style="margin-top:8px">💥 まくり・荒れ候補を探す（穴狙い・上級者向け）</button>
     <div id="scanout" class="note" style="margin-top:8px"></div>
   </div>
@@ -815,7 +816,11 @@ function scanDay(){
          var c1=-1; for(var q=0;q<bs.length;q++){ if((bs[q].course||q+1)===1){c1=q;break;} }
          var sas=(c1>=0&&wp.sasare)?wp.sasare[c1]:0, outIdx=-1, outAtk=0;
          for(var q2=0;q2<bs.length;q2++){ var cc=bs[q2].course||q2+1; if(cc>=3&&cc<=4&&(wp.atk[q2]||0)>outAtk){outAtk=wp.atk[q2]||0; outIdx=q2;} }
-         scored.push({jcd:jcd,rno:rno,top:top,gap:gap,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr,
+         // ◎本命の信頼度(スキャン簡易版：win/gap/ST/機力/荒れの低さ/実測1着率。妙味はオッズが要るので別)
+         var hb=bs[od[0]], clc=function(x,a,z){return Math.max(0,Math.min(1,(x-a)/(z-a)));};
+         var chaosApx=0.18+0.35*sas;
+         var conf=100*(0.34*clc(top,0.40,0.72)+0.20*clc(gap,0,0.28)+0.12*clc(0.185-(hb.st||0.18),0,0.06)+0.12*clc((hb.motor||0),32,55)+0.12*clc(0.45-chaosApx,0,0.35)+0.10*(hb.cwin>0?clc(hb.cwin,52,88):0.4));
+         scored.push({jcd:jcd,rno:rno,top:top,gap:gap,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr,conf:conf,
            makuri:sas*outAtk, sas:sas, mkboat:outIdx>=0?outIdx+1:0, mkname:outIdx>=0?(bs[outIdx].name||''):'', mkatk:outAtk,
            solid:top+gap*0.6-Math.min(sas*outAtk,0.3)*1.5}); // 鉄板度：本命勝率＋2番手差－荒れ
        }catch(err){skipped++;}
@@ -854,6 +859,17 @@ function renderMakuri(){
     '<br><span class="note">⚠ <b>高配当だが的中率は低い</b>。連敗中に穴頭を追うと傷が深くなる。狙うなら<b>少額・見送り前提</b>で、まくり本線は「外頭→1→他」。タップで読み込み。</span>';
 }
 document.getElementById('makuri').addEventListener('click',renderMakuri);
+// 🔥 ゴリ押し候補（信頼度が高いレースを抽出。妙味は各自オッズで確認）
+function renderGori(){
+  var out=document.getElementById('scanout');
+  if(!DAYRACES.length){ scanDay(); out.innerHTML='まず全場スキャン中…（数秒後にもう一度「🔥ゴリ押し候補」を押してください）'; return; }
+  var list=DAYRACES.slice().filter(function(s){return s.conf>=68;}).sort(function(a,b){return b.conf-a.conf;}).slice(0,10);
+  if(!list.length){ out.innerHTML='信頼度68以上の本命レースは今日はありません（＝厚く張れる鉄板が無い＝無理に打たない日）。'; return; }
+  out.innerHTML='<b>🔥 ゴリ押し"候補"</b>（信頼度68以上の本命）<br>'+
+    list.map(function(s){return '<a href="#" data-i="'+DAYRACES.indexOf(s)+'" class="pickrace" style="color:var(--plus);display:inline-block;padding:3px 0">信頼度'+s.conf.toFixed(0)+'｜'+STADIUMS[s.jcd]+' '+s.rno+'R｜◎'+s.honmei+s.name+' 勝率'+(s.top*100).toFixed(0)+'%</a>';}).join('<br>')+
+    '<br><span class="note">⚠ これは<b>信頼度だけ</b>の候補。<b>タップ→実オッズを入れ、妙味(EV≥1.2)が出た時だけ🔥ゴリ押し</b>。妙味が無ければ堅くても見送り（過剰人気）。¥50,000なら1レース上限¥2,000。</span>';
+}
+document.getElementById('gori').addEventListener('click',renderGori);
 document.getElementById('scanout').addEventListener('click',function(e){
   var a=e.target.closest('.pickrace'); if(!a)return; e.preventDefault();
   var s=DAYRACES[+a.getAttribute('data-i')]; if(!s)return;
