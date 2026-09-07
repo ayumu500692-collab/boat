@@ -321,6 +321,30 @@ function fuseAll(boats){
   var top=function(v){var t=0;for(var i=1;i<v.length;i++)if(v[i]>v[t])t=i;return t;};
   return {p:fused, seer:seer, num:num, sim:sim, agree:agree, topNum:top(num), topSim:top(sim), topSeer:top(seer)};
 }
+// ===== ◎本命の信頼度スコア（多要素・0-100）=====
+function honmeiConfidence(){
+  var fu=LAST.fused, sim=LAST.sim, boats=LAST.boats;
+  var P=fu?fu.p:(sim?sim.p1:LAST.p);
+  var ord=P.map(function(v,i){return i;}).sort(function(a,b){return P[b]-P[a];});
+  var h=ord[0], b=boats[h], gap=P[ord[0]]-P[ord[1]];
+  var chaos=sim?sim.chaos:0.3, agree=fu?fu.agree:0.7;
+  var cl=function(x,a,z){return Math.max(0,Math.min(1,(x-a)/(z-a)));};
+  var hasC=b.cwin>0;
+  var f={
+    win:cl(P[h],0.40,0.72),        // 融合1着率
+    gap:cl(gap,0,0.28),            // 2番手との差
+    agree:cl(agree,0.55,0.85),     // 3系統一致度
+    st:cl(0.185-(b.st||0.18),0,0.06), // ST速さ
+    mot:cl((b.motor||0),32,55),    // 機力
+    calm:cl(0.45-chaos,0,0.35),    // 荒れの低さ
+    c:hasC?cl(b.cwin,52,88):0      // 実測1着率(あれば)
+  };
+  var w={win:0.30,gap:0.18,agree:0.16,st:0.08,mot:0.08,calm:0.08,c:hasC?0.12:0};
+  var tot=0,acc=0; for(var k in w){tot+=w[k]; acc+=w[k]*f[k];}
+  var score=100*acc/tot;
+  var tier=score>=82?'鉄板級':score>=68?'堅い':score>=55?'中庸':'弱本命';
+  return {h:h, score:score, tier:tier, factors:f, hasC:hasC};
+}
 // ===== モンテカルロ・シミュレーション（レース毎の"荒れ度"を振って2万回試行）=====
 // 平穏(calm)と荒れ(rough)の確率を用意し、各試行でchaosを引いて混ぜる→相関のある決着を再現
 function pickIdx(weights,used){
@@ -507,7 +531,12 @@ function renderFinal(){
     fusebadge='<div class="note" style="margin:0 0 4px">🔀 <b>数値×シミュ×予想家 融合</b>／一致度<b>'+(ag*100).toFixed(0)+'%</b> <span style="color:'+ac[2]+'">'+ac[0]+' '+ac[1]+'</span></div>'+
       '<div class="note" style="margin:0 0 6px">◎候補：数値 '+(fu.topNum+1)+' ／ シミュ '+(fu.topSim+1)+' ／ 予想家 '+(fu.topSeer+1)+(same?'（3系統一致＝軸信頼）':'（割れ＝軸は固めて手広くしない）')+'</div>';
   }
-  document.getElementById('finalhead').innerHTML=simbadge+fusebadge+
+  LAST.conf=honmeiConfidence();
+  var cf=LAST.conf, ct=cf.score>=82?'var(--plus)':cf.score>=68?'var(--plus)':cf.score>=55?'var(--warn)':'var(--minus)';
+  var confbadge='<div class="verdict '+(cf.score>=68?'v-good':cf.score>=55?'v-mid':'v-bad')+'" style="margin-bottom:8px">🔒 ◎本命 信頼度 '+cf.score.toFixed(0)+'/100（'+cf.tier+'）'+
+    '<small>勝率'+(P[cf.h]*100).toFixed(0)+'%・一致度'+((LAST.fused?LAST.fused.agree:0.7)*100).toFixed(0)+'%・荒れ度'+((sim?sim.chaos:0.3)*100).toFixed(0)+'%'+(cf.hasC?'・実測1着率反映':'')+' を合成</small>'+
+    '<small style="color:var(--ink)"><b>ゴリ押しは「信頼度68+ × 妙味(実オッズ>分岐) × 上限内」の三拍子だけ。%だけで張らない。</b></small></div>';
+  document.getElementById('finalhead').innerHTML=simbadge+fusebadge+confbadge+
     '<div class="marks">'+
     '<div class="mk"><span class="mkb mk-honmei">◎</span><span class="mkl">本命</span><span><b>'+nm(f.honmei)+'</b> <span class="note">1着'+(P[f.honmei]*100).toFixed(0)+'%</span></span></div>'+
     '<div class="mk"><span class="mkb mk-chu">○</span><span class="mkl">中堅</span><span><b>'+nm(f.o1)+'</b>'+t3s(f.o1)+'　<b>'+nm(f.o2)+'</b>'+t3s(f.o2)+'</span></div>'+
@@ -553,7 +582,14 @@ function allocFinal(){
   if(nige.length)alloc(nige,bn); if(tobi.length)alloc(tobi,bt);
   items.forEach(function(it){if(fund.indexOf(it)<0)it.yen=0;});
   var total=0; items.forEach(function(it){it.tr.querySelector('.fyen').textContent=it.yen?('¥'+it.yen):'–'; total+=it.yen||0;});
-  document.getElementById('fnote').innerHTML=(hasOdds?'妙味'+fund.length+'点に配分。':'※オッズ未入力→確率で仮配分。')+' 計¥'+total+'（逃げ'+Math.round(bn/(budget||1)*100)+'：飛び'+Math.round(bt/(budget||1)*100)+'）。<b>取り返しの増額は禁止。</b>';
+  // 🔥 ゴリ押し判定＝信頼度 × 妙味 の二拍子
+  var conf=(LAST.conf?LAST.conf.score:0), topEV=fund.reduce(function(m,it){return Math.max(m,it.ev||0);},0), gp;
+  if(!hasOdds) gp='<b>ゴリ押し判定：</b>実オッズを入れると可否を出します（信頼度'+conf.toFixed(0)+'／%だけでは張らない）。';
+  else if(!fund.length) gp='<b class="minus">🚫 ゴリ押し禁物</b>：信頼度'+conf.toFixed(0)+'でも<b>妙味なし＝過剰人気</b>。薄く or 見送り（今日の蒲郡型）。';
+  else if(conf>=68&&topEV>=1.2) gp='<b class="plus">🔥 ゴリ押し候補</b>：信頼度'+conf.toFixed(0)+' × 妙味あり(最大EV'+topEV.toFixed(2)+')。<b>上限内で厚く</b>OK。ただし<b>取り返しの増額は禁止</b>。';
+  else if(conf<55) gp='<b class="minus">本命が弱い</b>（信頼度'+conf.toFixed(0)+'）＝ゴリ押し不可。妙味の'+fund.length+'点を軽く or 見送り。';
+  else gp='信頼度'+conf.toFixed(0)+'＝中程度。妙味'+fund.length+'点を<b>通常配分（厚張りはしない）</b>。';
+  document.getElementById('fnote').innerHTML=(hasOdds?'妙味'+fund.length+'点に配分。':'※オッズ未入力→確率で仮配分。')+' 計¥'+total+'（逃げ'+Math.round(bn/(budget||1)*100)+'：飛び'+Math.round(bt/(budget||1)*100)+'）。<br>'+gp;
   if(LAST) renderParade(); // ④のオッズでレン/ケイ/デスクの見立ても更新
 }
 document.getElementById('fpts').addEventListener('change',renderFinal);
