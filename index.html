@@ -138,7 +138,7 @@ small.hint{color:var(--mut);font-size:11px}
     <h2>② 出走表（自動＋手修正）</h2>
     <div style="overflow-x:auto">
       <table id="inp"><thead><tr>
-        <th>コース</th><th>選手<span class="tag auto">自</span></th><th>級別</th><th>全国2連<span class="tag auto">自</span></th><th>当地2連<span class="tag auto">自</span></th><th>当地3連<span class="tag auto">自</span></th><th>M2連<span class="tag auto">自</span></th><th>平均ST<span class="tag auto">自</span></th><th>実測1着率<span class="tag man">手</span></th><th>展示T<span class="tag man">手</span></th><th>決手%<span class="tag man">手</span></th>
+        <th>コース</th><th>選手<span class="tag auto">自</span></th><th>級別</th><th>全国2連<span class="tag auto">自</span></th><th>当地2連<span class="tag auto">自</span></th><th>当地3連<span class="tag auto">自</span></th><th>M2連<span class="tag auto">自</span></th><th>平均ST<span class="tag auto">自</span></th><th>実測1着率<span class="tag man">手</span></th><th>展示T<span class="tag man">手</span></th><th>決手%<span class="tag man">手</span></th><th>F/L<span class="tag auto">自</span></th>
       </tr></thead><tbody></tbody></table>
     </div>
     <div class="note"><b>コース＝進入</b>（前づけがあれば書き換える＝v2の要）。<b>実測1着率</b>＝「1コース1着率」等（本命の堅さを最も左右）。<b>決手%</b>＝決まり手データ（<b>1号艇＝差され率</b>／<b>2〜6号艇＝攻め率＝差し＋まくり＋まくり差し</b>）。空欄なら<b>ST・機力・コースから自動推定</b>。すべて任意・補正であり実力(2連率)は覆さない。</div>
@@ -223,7 +223,8 @@ var CWIN_BLEND=0.5; // 実測1着率の混合率(段階A)
 var CFG={K:K,T:1.0};
 try{var _cfg=JSON.parse(localStorage.getItem('bn_cfg')||'null'); if(_cfg&&_cfg.K>0){CFG.K=_cfg.K; CFG.T=_cfg.T>0?_cfg.T:1.0;}}catch(e){}
 function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
-
+// F/L(フライング・出遅れ)持ちのスタート自重ペナルティ(確定データ)。F1/L1=軽/F2以上=重
+function flPen(b){var f=(b.fl||'').toString().toUpperCase(); if(!f)return 0; var n=(f.match(/[FL]?\s*([2-9])/)||[])[1]; if((/F2|L2|[FL]\s*[2-9]/).test(f)||n>=2)return 0.10; if((/[FL]/).test(f))return 0.055; return 0;}
 function strength(b){
   var g=GRADE[b.grade]!=null?GRADE[b.grade]:0.5;
   var nat=clamp(b.nat/60,0,1);
@@ -231,7 +232,7 @@ function strength(b){
   var loc3=clamp((b.loc3||b.loc)/80,0,1);      // 当地3連(無ければ2連で代用)
   var mot=clamp(b.motor/50,0,1);
   var st=clamp((0.21-b.st)/0.09,0,1);
-  return W.grade*g+W.nat*nat+W.loc*loc+W.loc3*loc3+W.motor*mot+W.st*st;
+  return Math.max(0.03, W.grade*g+W.nat*nat+W.loc*loc+W.loc3*loc3+W.motor*mot+W.st*st - flPen(b)); // F/L持ちは自重ぶん減
 }
 function tenjiAdj(boats){ // 展示Tの微補正(±0.03)
   var vals=boats.map(function(b){return b.tenji||null;});
@@ -257,8 +258,9 @@ function kimarite(boats){
     var stq=clamp((0.21-(b.st||0.18))/0.09,0,1); // ST速い=1
     var mq=clamp((b.motor||0)/50,0,1);            // 機力=1
     if(c===1){
-      // 差され推定: ST遅い・機力低いほど逃げ崩れやすい
+      // 差され推定: ST遅い・機力低いほど逃げ崩れやすい ＋ F/L持ちは自重で差されやすい(確定)
       var sas=(b.km>0)?clamp(b.km/100,0,0.7):clamp(0.10+0.42*(1-stq)+0.30*(1-mq),0,0.6);
+      if(flPen(b)>0) sas=clamp(sas+(flPen(b)>=0.10?0.16:0.09),0,0.75);
       return {atk:0, sasare:sas};
     }
     // 攻め推定: カド(4)>センター(3)>(5)>(2)の地の利 × 機力 × ST
@@ -468,6 +470,7 @@ function reasons(b,km){
     if(c===1 && km.sasare>=0.32) r.push('差され率'+(km.sasare*100).toFixed(0)+'%'+(b.km>0?'':'(推定)')+'＝逃げ崩れ注意');
     else if(c>=3 && km.atk>=0.52) r.push('攻め力'+(km.atk*100).toFixed(0)+'%'+(b.km>0?'':'(推定)')+'＝差し/まくりの脅威');
   }
+  if(b.fl){var fu=(''+b.fl).toUpperCase(); if(/F/.test(fu))r.push(fu+'＝フライング持ちでスタート自重'+(c===1?'（逃げ崩れ注意）':'')); else if(/L/.test(fu))r.push(fu+'＝出遅れ持ち');}
   if(c===1) r.push('1コース＝逃げ本線');
   else if(c>=4 && b.motor>=40) r.push('外枠×好機力＝一撃の目');
   if(!r.length) r.push(b.grade+'・目立った強調点なし');
@@ -489,7 +492,8 @@ for(var i=0;i<6;i++){
     '<td><input type="number" class="st" step="0.01" placeholder="0.15"></td>'+
     '<td><input type="number" class="cwin" step="0.1" placeholder="任意"></td>'+
     '<td><input type="number" class="tenji" step="0.01" placeholder="任意"></td>'+
-    '<td><input type="number" class="km" step="0.1" placeholder="任意"></td>';
+    '<td><input type="number" class="km" step="0.1" placeholder="任意"></td>'+
+    '<td><input type="text" class="fl" placeholder="F/L" style="width:44px"></td>';
   TB.appendChild(tr);
 }
 function readBoats(){
@@ -497,7 +501,8 @@ function readBoats(){
     var q=function(s){return tr.querySelector(s);};
     return {course:+q('.course').value||0,name:q('.name').value||'',grade:q('.grade').value,nat:+q('.nat').value||0,
       loc:+q('.loc').value||0,loc3:+q('.loc3').value||0,motor:+q('.motor').value||0,
-      st:+q('.st').value||0.18,cwin:+q('.cwin').value||0,tenji:+q('.tenji').value||0,km:+q('.km').value||0};
+      st:+q('.st').value||0.18,cwin:+q('.cwin').value||0,tenji:+q('.tenji').value||0,km:+q('.km').value||0,
+      fl:(q('.fl')?q('.fl').value:'')||''};
   });
 }
 function fmtC(c){return c.join('-');}
@@ -1074,7 +1079,8 @@ function mapBoats(race){
     loc:num(pick(b,["racer_local_top_2_percent","local_top_2_percent"])),
     loc3:num(pick(b,["racer_local_top_3_percent","local_top_3_percent"])),
     motor:num(pick(b,["racer_assigned_motor_top_2_percent","motor_top_2_percent"])),
-    st:num(pick(b,["racer_average_start_timing","average_start_timing"]))||0.18
+    st:num(pick(b,["racer_average_start_timing","average_start_timing"]))||0.18,
+    fl:(function(){var f=num(pick(b,["racer_flying_count","flying_count"])),l=num(pick(b,["racer_late_count","late_count"])); return (f>0?'F'+f:'')+(l>0?'L'+l:'');})()
   };});
 }
 function fillTable(boats){
@@ -1088,6 +1094,7 @@ function fillTable(boats){
     r.querySelector('.loc3').value=x.loc3||'';
     r.querySelector('.motor').value=x.motor||'';
     r.querySelector('.st').value=x.st||'';
+    if(r.querySelector('.fl'))r.querySelector('.fl').value=x.fl||'';
   });
 }
 document.getElementById('fetch').addEventListener('click',function(){
