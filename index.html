@@ -160,9 +160,12 @@ small.hint{color:var(--mut);font-size:11px}
       <label class="mini">点数 <select id="fpts"><option value="3">3点</option><option value="5" selected>5点</option><option value="7">7点</option></select></label>
       <label class="mini">💰予算¥ <input id="fbudget" type="number" value="10000" step="500" style="width:82px"></label>
     </div>
+    <div class="note" style="margin:0 0 3px"><b>3連単</b>（高配当・当たりにくい）</div>
     <div style="overflow-x:auto"><table class="tri"><thead><tr><th>段</th><th>買い目</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>¥配分</th></tr></thead><tbody id="ftri"></tbody></table></div>
     <div class="note" id="fnote"></div>
-    <div class="note"><b>💡 オッズは打たなくてOK。</b>賭けサイトの倍率を見て、上の「分岐」より<b class="plus">高ければ買い（妙味）</b>／<b class="minus">低ければ見送り（過剰人気）</b>。目で見比べるだけ。<br>（実オッズを打ち込めばEV・¥配分・🔥ゴリ押し判定まで自動で出ます＝おまけ）</div>
+    <div class="note" style="margin:12px 0 3px"><b>🎫 3連複</b>（順不同で3艇＝<b class="plus">当たりやすい</b>・配当低め。当てて続けたい時はこっち）</div>
+    <div style="overflow-x:auto"><table class="tri"><thead><tr><th>買い目</th><th>的中率</th><th>分岐</th><th>実オッズ</th><th>判定</th></tr></thead><tbody id="ftri3"></tbody></table></div>
+    <div class="note"><b>💡 オッズは打たなくてOK。</b>賭けサイトの倍率を見て、「分岐」より<b class="plus">高ければ買い（妙味）</b>／<b class="minus">低ければ見送り（過剰人気）</b>。目で見比べるだけ。<br>（実オッズを打ち込めばEV・¥配分・🔥ゴリ押し判定まで自動で出ます＝おまけ）</div>
     <button class="btn ghost" id="mknote" style="margin-top:10px">📝 note / X の下書きを作る（免責つき）</button>
     <div id="noteout" hidden style="margin-top:8px">
       <div class="note" style="margin:0 0 4px">▼ note本文（コピペ→「【ここから有料】」の位置で有料設定）</div>
@@ -331,20 +334,28 @@ function honmeiConfidence(){
   var chaos=sim?sim.chaos:0.3, agree=fu?fu.agree:0.7;
   var cl=function(x,a,z){return Math.max(0,Math.min(1,(x-a)/(z-a)));};
   var hasC=b.cwin>0;
+  // 荒れ耐性：荒れ水面でも本命の1着率がどれだけ残るか（崩れる本命は危険）
+  var Ac=winProbs(boats,CFG,'calm'), Ar=winProbs(boats,CFG,'rough');
+  var robust=Ac.p[h]>0?Ar.p[h]/Ac.p[h]:0.5;
+  // 本命が3着内を外す確率の低さ（シミュ複勝率）
+  var t3h=sim&&sim.top3?sim.top3[h]:0.7;
   var f={
-    win:cl(P[h],0.40,0.72),        // 融合1着率
-    gap:cl(gap,0,0.28),            // 2番手との差
-    agree:cl(agree,0.55,0.85),     // 3系統一致度
+    win:cl(P[h],0.40,0.72),           // 融合1着率
+    gap:cl(gap,0,0.28),               // 2番手との差
+    agree:cl(agree,0.55,0.85),        // 3系統一致度
+    robust:cl(robust,0.45,0.88),      // 荒れ耐性(NEW)
+    t3:cl(t3h,0.72,0.92),             // 複勝安定(NEW)
+    loc:cl((b.loc||0),30,58),         // 当地実績(NEW)
     st:cl(0.185-(b.st||0.18),0,0.06), // ST速さ
-    mot:cl((b.motor||0),32,55),    // 機力
-    calm:cl(0.45-chaos,0,0.35),    // 荒れの低さ
-    c:hasC?cl(b.cwin,52,88):0      // 実測1着率(あれば)
+    mot:cl((b.motor||0),32,55),       // 機力
+    calm:cl(0.45-chaos,0,0.35),       // 荒れの低さ
+    c:hasC?cl(b.cwin,52,88):0         // 実測1着率(あれば)
   };
-  var w={win:0.30,gap:0.18,agree:0.16,st:0.08,mot:0.08,calm:0.08,c:hasC?0.12:0};
+  var w={win:0.22,gap:0.13,agree:0.11,robust:0.13,t3:0.08,loc:0.07,st:0.06,mot:0.06,calm:0.06,c:hasC?0.10:0};
   var tot=0,acc=0; for(var k in w){tot+=w[k]; acc+=w[k]*f[k];}
   var score=100*acc/tot;
   var tier=score>=82?'鉄板級':score>=68?'堅い':score>=55?'中庸':'弱本命';
-  return {h:h, score:score, tier:tier, factors:f, hasC:hasC};
+  return {h:h, score:score, tier:tier, factors:f, hasC:hasC, robust:robust};
 }
 // ===== モンテカルロ・シミュレーション（レース毎の"荒れ度"を振って2万回試行）=====
 // 平穏(calm)と荒れ(rough)の確率を用意し、各試行でchaosを引いて混ぜる→相関のある決着を再現
@@ -560,8 +571,20 @@ function renderFinal(){
     return '<tr data-i="'+i+'"><td class="note" style="text-align:left;white-space:nowrap">'+o.role+'</td><td><b>'+o.combo.map(function(x){return x+1;}).join('-')+'</b></td><td>'+o.be.toFixed(1)+'</td>'+
       '<td><input type="number" class="fodds" step="0.1" placeholder="入力" style="width:56px"></td><td class="fev">–</td><td class="fyen" style="white-space:nowrap">–</td></tr>';
   }).join('');
+  // 🎫 3連複：シミュの3連単頻度を順不同で集計→当たりやすい順に上位表示
+  var sim=LAST.sim, box={};
+  if(sim&&sim.comboProb){
+    for(var kk in sim.comboProb){ var arr=kk.split('-').map(Number).sort(function(a,b){return a-b;}); var key=arr.join('-'); box[key]=(box[key]||0)+sim.comboProb[kk]; }
+  }
+  var boxes=Object.keys(box).map(function(k){return {k:k,p:box[k]};}).sort(function(a,b){return b.p-a.p;}).slice(0,4);
+  FINBOX=boxes;
+  document.getElementById('ftri3').innerHTML=boxes.length?boxes.map(function(o,i){
+    return '<tr data-i="'+i+'"><td><b>'+o.k+'</b></td><td>'+(o.p*100).toFixed(1)+'%</td><td>'+(1/o.p).toFixed(1)+'</td>'+
+      '<td><input type="number" class="f3odds" step="0.1" placeholder="入力" style="width:56px"></td><td class="f3jd note" style="text-align:left">分岐↑で買い</td></tr>';
+  }).join(''):'<tr><td colspan="5" class="note">先に計算してください</td></tr>';
   allocFinal();
 }
+var FINBOX=[];
 function allocFinal(){
   if(!FINPTS.length)return;
   var budget=+document.getElementById('fbudget').value||0;
@@ -597,6 +620,16 @@ function allocFinal(){
 document.getElementById('fpts').addEventListener('change',renderFinal);
 document.getElementById('ftri').addEventListener('input',function(e){ if(e.target.classList.contains('fodds'))allocFinal(); });
 document.getElementById('fbudget').addEventListener('input',allocFinal);
+// 3連複：実オッズ vs 分岐 で妙味/過剰を判定
+document.getElementById('ftri3').addEventListener('input',function(e){
+  if(!e.target.classList.contains('f3odds'))return;
+  var tr=e.target.closest('tr'), o=FINBOX[+tr.getAttribute('data-i')], jd=tr.querySelector('.f3jd');
+  var od=+e.target.value||0; if(!o||!od){jd.className='f3jd note';jd.textContent='分岐↑で買い';return;}
+  var be=1/o.p, ev=od*o.p;
+  if(od>=be*1.05){jd.className='f3jd plus';jd.innerHTML='◎妙味(買い) EV'+ev.toFixed(2);}
+  else if(od>=be*0.95){jd.className='f3jd note';jd.textContent='ほぼフェア';}
+  else {jd.className='f3jd minus';jd.textContent='過剰人気';}
+});
 
 // ===== 予想部隊 11人の見立て（同じ数字を別angleで斬る）=====
 function renderParade(){
