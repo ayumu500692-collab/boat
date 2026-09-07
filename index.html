@@ -300,8 +300,8 @@ function seerVotes(boats){
   var atk=LAST.atk||[], p=LAST.p, n=boats.length;
   function norm(v){var s=v.reduce(function(a,b){return a+b;},0)||1; return v.map(function(x){return x/s;});}
   var V=[];
-  // 鉄板剛：イン/コース重視
-  V.push(norm(boats.map(function(b,i){var c=clamp((b.course||i+1)-1,0,5); return COURSE_BASE[c]*(1+strength(b));})));
+  // 鉄板剛：イン/コース重視＋実測1着率(cwin)を強く評価
+  V.push(norm(boats.map(function(b,i){var c=clamp((b.course||i+1)-1,0,5); var cw=b.cwin>0?b.cwin/100:0; return COURSE_BASE[c]*(1+strength(b))*(1+1.3*cw);})));
   // 荒波テツ：攻め力(外の一撃)
   V.push(norm(boats.map(function(b,i){return Math.max(0.02,(atk[i]||0)*(0.5+strength(b))+0.03);})));
   // 複勝ナオ：当地3連(3着堅実)
@@ -466,25 +466,26 @@ function render(){
   LAST.sim=simulateRace(boats,CFG,30000); // 3万回シミュレーション
   LAST.fused=fuseAll(boats); // 数値×シミュ×予想家の融合
   var pr=placeRates(p,wp.w);
+  var P=(LAST.fused?LAST.fused.p:p); // ③も④と同じ融合確率で統一(数値だけの過大評価を出さない)
   var host=document.getElementById('probs');
-  var order=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
+  var order=P.map(function(v,i){return i;}).sort(function(a,b){return P[b]-P[a];});
   var ROLE=['◎本命','○対抗','▲単穴','△','△','消'];
   host.innerHTML=order.map(function(i,idx){
     var b=boats[i], nm=b.name||('艇'+(i+1)), rs=reasons(b,{atk:wp.atk[i],sasare:wp.sasare[i]});
     return '<div class="pl">'+
       '<div class="row"><span class="wk '+COL[i]+'">'+(i+1)+'</span>'+
       '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+nm+'</b> <span class="tag">'+b.grade+(b.cwin?'★':'')+'</span> <span class="role">'+ROLE[idx]+'</span></span>'+
-      '<span class="pct">'+(p[i]*100).toFixed(1)+'%</span>'+
+      '<span class="pct">'+(P[i]*100).toFixed(1)+'%</span>'+
       '<span class="pct" style="color:var(--mut)">連'+(pr.top2[i]*100).toFixed(0)+'</span>'+
       '<span class="pct" style="color:var(--mut)">複'+(pr.top3[i]*100).toFixed(0)+'</span></div>'+
-      '<div class="bar" style="margin:3px 0 5px"><i style="width:'+(p[i]*100).toFixed(1)+'%"></i></div>'+
+      '<div class="bar" style="margin:3px 0 5px"><i style="width:'+(P[i]*100).toFixed(1)+'%"></i></div>'+
       (rs.length?'<div class="why">'+rs.map(function(x){return '<span class="wt">'+x+'</span>';}).join('')+'</div>':'')+
       '</div>';
   }).join('');
   var t3=order.slice(0,3).map(function(i){return (i+1)+(boats[i].name||'');});
-  document.getElementById('topnote').innerHTML='◎本命 <b>'+t3[0]+'</b> ／ ○対抗 '+t3[1]+' ／ ▲単穴 '+t3[2]+'（軸を後付けの理屈で削らない）。★=実測1着率反映／%=1着率・連=連対・複=複勝。';
+  document.getElementById('topnote').innerHTML='◎本命 <b>'+t3[0]+'</b> ／ ○対抗 '+t3[1]+' ／ ▲単穴 '+t3[2]+'（軸を後付けの理屈で削らない）。★=実測1着率反映／<b>%=融合1着率(数値×シミュ×予想家)</b>・連=連対・複=複勝。';
   // 軸1: レース選定判定（打つ/見送り）
-  var top=p[order[0]], gap=top-p[order[1]], b0=boats[order[0]], nm0=(order[0]+1)+(b0.name||'');
+  var top=P[order[0]], gap=top-P[order[1]], b0=boats[order[0]], nm0=(order[0]+1)+(b0.name||'');
   var vc,vt,vs;
   var stake;
   if(top>=0.60 && gap>=0.22){vc='v-good';vt='🟢 打ち候補';vs='本命 '+nm0+' が明確（勝率'+(top*100).toFixed(0)+'%・2番手と'+(gap*100).toFixed(0)+'pt差）。軸を絡めて厚く獲る。';stake='推奨：軸を絡めて<b>5〜8点／予算内で厚めOK</b>。';}
