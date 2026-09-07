@@ -258,9 +258,9 @@ function kimarite(boats){
   });
 }
 // 段階A: 1着確率(コース支配 + 実測1着率ブレンド + 水面 + 差され割引) / 段階B用のplace重みも返す
-function winProbs(boats,cfg){
+function winProbs(boats,cfg,waterOverride){
   cfg=cfg||CFG; var KK=cfg.K>0?cfg.K:K, T=cfg.T>0?cfg.T:1.0;
-  var w=(document.getElementById('water')||{}).value||'calm';
+  var w=waterOverride||(document.getElementById('water')||{}).value||'calm';
   var cb=waterCB(w);
   var mBonus=w==='rough'?0.14:(w==='mid'?0.06:0); // 荒れ×好機力の相互作用
   var adj=tenjiAdj(boats);
@@ -292,6 +292,34 @@ function winProbs(boats,cfg){
   var sw=pw.reduce(function(a,b){return a+b;},0);
   return {p:p,str:str,w:pw.map(function(x){return x/sw;}),
           atk:km.map(function(k){return k.atk;}),sasare:km.map(function(k){return k.sasare;})};
+}
+// ===== モンテカルロ・シミュレーション（レース毎の"荒れ度"を振って2万回試行）=====
+// 平穏(calm)と荒れ(rough)の確率を用意し、各試行でchaosを引いて混ぜる→相関のある決着を再現
+function pickIdx(weights,used){
+  var s=0,i; for(i=0;i<weights.length;i++) if(!used[i]) s+=weights[i];
+  if(s<=0){ for(i=0;i<weights.length;i++) if(!used[i]) return i; return 0; }
+  var r=Math.random()*s, acc=0;
+  for(i=0;i<weights.length;i++){ if(used[i])continue; acc+=weights[i]; if(r<=acc) return i; }
+  for(i=weights.length-1;i>=0;i--) if(!used[i]) return i; return 0;
+}
+function simulateRace(boats,cfg,N){
+  N=N||20000; cfg=cfg||CFG;
+  var water=(document.getElementById('water')||{}).value||'calm';
+  var chaosMean= water==='rough'?0.55 : water==='mid'?0.35 : 0.20; // 平均の荒れ度
+  var A=winProbs(boats,cfg,'calm'), B=winProbs(boats,cfg,'rough'); // 両極の確率
+  var n=boats.length, p1=new Array(n).fill(0), t3=new Array(n).fill(0), combo={};
+  var pr=new Array(n), wr=new Array(n), used=new Array(n);
+  for(var r=0;r<N;r++){
+    var u=chaosMean+(Math.random()-Math.random())*0.4; if(u<0)u=0; if(u>1)u=1; // この試行の荒れ度
+    for(var i=0;i<n;i++){ pr[i]=(1-u)*A.p[i]+u*B.p[i]; wr[i]=(1-u)*A.w[i]+u*B.w[i]; used[i]=false; }
+    var a=pickIdx(pr,used); used[a]=true;
+    var b=pickIdx(wr,used); used[b]=true;
+    var c=pickIdx(wr,used);
+    p1[a]++; t3[a]++; t3[b]++; t3[c]++;
+    var key=(a+1)+'-'+(b+1)+'-'+(c+1); combo[key]=(combo[key]||0)+1;
+  }
+  var cp={}; for(var k in combo) cp[k]=combo[k]/N;
+  return {p1:p1.map(function(x){return x/N;}), top3:t3.map(function(x){return x/N;}), comboProb:cp, N:N};
 }
 // 3連単: 1着=p, 2・3着=place重みw(spec §4B)。wは省略時pで従来動作
 function trifecta(p,w){
@@ -372,6 +400,7 @@ var LAST=null;
 function render(){
   var boats=readBoats();
   var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p,w:wp.w,str:wp.str,atk:wp.atk,sasare:wp.sasare};
+  LAST.sim=simulateRace(boats,CFG,20000); // 2万回シミュレーション
   var pr=placeRates(p,wp.w);
   var host=document.getElementById('probs');
   var order=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
@@ -409,13 +438,19 @@ function render(){
 // ===== 🎯 最終買い目（◎→○→穴で1枚に絞る）=====
 var FINPTS=[];
 function pickFinal(){
-  var boats=LAST.boats,p=LAST.p,atk=LAST.atk||[],ix=boats.map(function(b,i){return i;});
+  var boats=LAST.boats,atk=LAST.atk||[],ix=boats.map(function(b,i){return i;});
+  var sim=LAST.sim, p=sim?sim.p1:LAST.p, top3=sim?sim.top3:null; // シミュレーション優先
   var ord=ix.slice().sort(function(a,b){return p[b]-p[a];});
   var used={}; used[ord[0]]=1; used[ord[1]]=1; used[ord[2]]=1;
-  var cand=ix.filter(function(i){return !used[i];}).sort(function(a,b){return ((atk[b]||0)+strength(boats[b])/2)-((atk[a]||0)+strength(boats[a])/2);});
+  // 穴＝残りのうち"3着以内に食い込む率"最大(シミュ)／無ければ攻め力
+  var cand=ix.filter(function(i){return !used[i];}).sort(function(a,b){
+    if(top3) return top3[b]-top3[a];
+    return ((atk[b]||0)+strength(boats[b])/2)-((atk[a]||0)+strength(boats[a])/2);
+  });
   return {honmei:ord[0],o1:ord[1],o2:ord[2],ana:cand.length?cand[0]:ord[3]};
 }
 function triProb(a,b,c){
+  if(LAST.sim){ var k=(a+1)+'-'+(b+1)+'-'+(c+1), v=LAST.sim.comboProb[k]; if(v&&v>0) return v; } // シミュ頻度優先
   var p=LAST.p,w=LAST.w||p,W=w.reduce(function(s,x){return s+x;},0);
   var w2=W-w[a], w3=w2-w[b]; if(w2<=0||w3<=0)return 0;
   return p[a]*(w[b]/w2)*(w[c]/w3);
@@ -423,24 +458,27 @@ function triProb(a,b,c){
 function renderFinal(){
   if(!LAST)return;
   var f=pickFinal(), boats=LAST.boats, nm=function(i){return (i+1)+' '+(boats[i].name||('艇'+(i+1)));};
-  document.getElementById('finalhead').innerHTML=
+  var sim=LAST.sim, P=sim?sim.p1:LAST.p, T3=sim?sim.top3:null;
+  var t3s=function(i){return T3?' <span class="note">3着内'+(T3[i]*100).toFixed(0)+'%</span>':'';};
+  var simbadge=sim?'<div class="note" style="margin:0 0 6px">🎲 '+ (sim.N/10000) +'万回シミュレーション結果（レース毎に荒れ度を振って試行）</div>':'';
+  document.getElementById('finalhead').innerHTML=simbadge+
     '<div class="marks">'+
-    '<div class="mk"><span class="mkb mk-honmei">◎</span><span class="mkl">本命</span><span><b>'+nm(f.honmei)+'</b> <span class="note">勝率'+(LAST.p[f.honmei]*100).toFixed(0)+'%</span></span></div>'+
-    '<div class="mk"><span class="mkb mk-chu">○</span><span class="mkl">中堅</span><span><b>'+nm(f.o1)+'</b>　<b>'+nm(f.o2)+'</b></span></div>'+
-    '<div class="mk"><span class="mkb mk-ana">▲</span><span class="mkl">穴</span><span><b>'+nm(f.ana)+'</b> <span class="note">一発（本命が飛んだ時）</span></span></div>'+
+    '<div class="mk"><span class="mkb mk-honmei">◎</span><span class="mkl">本命</span><span><b>'+nm(f.honmei)+'</b> <span class="note">1着'+(P[f.honmei]*100).toFixed(0)+'%</span></span></div>'+
+    '<div class="mk"><span class="mkb mk-chu">○</span><span class="mkl">中堅</span><span><b>'+nm(f.o1)+'</b>'+t3s(f.o1)+'　<b>'+nm(f.o2)+'</b>'+t3s(f.o2)+'</span></div>'+
+    '<div class="mk"><span class="mkb mk-ana">▲</span><span class="mkl">穴</span><span><b>'+nm(f.ana)+'</b>'+t3s(f.ana)+' <span class="note">一発（本命が飛んだ時）</span></span></div>'+
     '</div>';
   var H=f.honmei,A=f.o1,B=f.o2,X=f.ana;
-  var all=[
-    {c:[H,A,B],r:'◎-○-○',leg:'nige'},
-    {c:[H,B,A],r:'◎-○-○',leg:'nige'},
-    {c:[H,A,X],r:'◎-○-穴',leg:'nige'},
-    {c:[H,B,X],r:'◎-○-穴',leg:'nige'},
-    {c:[X,H,A],r:'穴-◎ 一発',leg:'tobi'},
-    {c:[A,H,B],r:'○-◎ 逆転',leg:'tobi'},
-    {c:[X,H,B],r:'穴-◎ 一発',leg:'tobi'}
-  ];
+  // ◎○穴の4艇から全並び(24通り)を作り、シミュ確率の高い順に買い目化(1-5-3のような並びも拾える)
+  var mk={}; mk[H]='◎'; mk[A]='○'; mk[B]='○'; mk[X]='穴';
+  var pool=[H,A,B,X], all=[];
+  for(var i0=0;i0<4;i0++)for(var j0=0;j0<4;j0++)for(var k0=0;k0<4;k0++){
+    if(i0===j0||i0===k0||j0===k0)continue;
+    var a0=pool[i0],b0=pool[j0],c0=pool[k0], pr0=triProb(a0,b0,c0);
+    all.push({combo:[a0,b0,c0],role:mk[a0]+'-'+mk[b0]+'-'+mk[c0],leg:(a0===H?'nige':'tobi'),prob:pr0,be:pr0>0?1/pr0:9999});
+  }
+  all.sort(function(x,y){return y.prob-x.prob;}); // 起きやすい順
   var npt=+document.getElementById('fpts').value||5;
-  FINPTS=all.slice(0,npt).map(function(o){var pr=triProb(o.c[0],o.c[1],o.c[2]);return {combo:o.c,role:o.r,leg:o.leg,prob:pr,be:pr>0?1/pr:9999};});
+  FINPTS=all.slice(0,npt);
   document.getElementById('ftri').innerHTML=FINPTS.map(function(o,i){
     return '<tr data-i="'+i+'"><td class="note" style="text-align:left;white-space:nowrap">'+o.role+'</td><td><b>'+o.combo.map(function(x){return x+1;}).join('-')+'</b></td><td>'+o.be.toFixed(1)+'</td>'+
       '<td><input type="number" class="fodds" step="0.1" placeholder="入力" style="width:56px"></td><td class="fev">–</td><td class="fyen" style="white-space:nowrap">–</td></tr>';
