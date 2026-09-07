@@ -129,6 +129,7 @@ small.hint{color:var(--mut);font-size:11px}
     </div>
     <div class="note" id="fetchmsg">会場・日付・Rを選んで「取得」。公式データ配信(Boatrace Open API)から<b>出走表(級別・全国/当地2連3連・モーター・ST)</b>を自動入力。※実測1着率・展示・オッズは配信に無いので手入力で補強（下記）。</div>
     <button class="btn ghost" id="scan" style="margin-top:8px">🔎 本日の厳選レースを探す（全場スキャン）</button>
+    <button class="btn ghost" id="makuri" style="margin-top:8px">💥 まくり・荒れ候補を探す（穴狙い・上級者向け）</button>
     <div id="scanout" class="note" style="margin-top:8px"></div>
   </div>
 
@@ -774,7 +775,12 @@ function scanDay(){
          var od=P.map(function(v,i){return i;}).sort(function(a,b){return P[b]-P[a];});
          var top=P[od[0]], gap=top-P[od[1]];
          var v=(top>=0.60&&gap>=0.22)?'🟢':(top>=0.48?'🟡':'🔴');
-         scored.push({jcd:jcd,rno:rno,top:top,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr});
+         // まくり指数：1号艇(進入1)の差されやすさ × 外(3-4コース)の攻め力
+         var c1=-1; for(var q=0;q<bs.length;q++){ if((bs[q].course||q+1)===1){c1=q;break;} }
+         var sas=(c1>=0&&wp.sasare)?wp.sasare[c1]:0, outIdx=-1, outAtk=0;
+         for(var q2=0;q2<bs.length;q2++){ var cc=bs[q2].course||q2+1; if(cc>=3&&cc<=4&&(wp.atk[q2]||0)>outAtk){outAtk=wp.atk[q2]||0; outIdx=q2;} }
+         scored.push({jcd:jcd,rno:rno,top:top,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr,
+           makuri:sas*outAtk, sas:sas, mkboat:outIdx>=0?outIdx+1:0, mkname:outIdx>=0?(bs[outIdx].name||''):'', mkatk:outAtk});
        }catch(err){skipped++;}
      });
      scored.sort(function(a,b){var va=a.v==='🟢'?0:a.v==='🟡'?1:2, vb=b.v==='🟢'?0:b.v==='🟡'?1:2; return va!==vb?va-vb:b.top-a.top;});
@@ -792,6 +798,17 @@ function scanDay(){
      out.innerHTML='⚠ スキャンできませんでした：'+(abort?'通信中断':(e.message||e))+'<br>※Artifactプレビューは通信制限で不可。<b>ライブ版(…github.io/boat)を開いて</b>ください（URL末尾に ?v7 を付けて最新読込）。'; });
 }
 document.getElementById('scan').addEventListener('click',scanDay);
+// 💥 まくり・荒れ候補（1号艇が弱く外に一撃があるレースを拾う）
+function renderMakuri(){
+  var out=document.getElementById('scanout');
+  if(!DAYRACES.length){ scanDay(); out.innerHTML='まず全場スキャン中…（数秒後にもう一度「💥まくり候補」を押してください）'; return; }
+  var list=DAYRACES.slice().filter(function(s){return s.makuri>0.12;}).sort(function(a,b){return b.makuri-a.makuri;}).slice(0,10);
+  if(!list.length){ out.innerHTML='まくり妙味のあるレースは見当たりません（1号艇が総じて強い日＝順当）。'; return; }
+  out.innerHTML='<b>💥 まくり・荒れ候補</b>（1号艇が弱く外に一撃）<br>'+
+    list.map(function(s){return '<a href="#" data-i="'+DAYRACES.indexOf(s)+'" class="pickrace" style="color:var(--minus);display:inline-block;padding:3px 0">'+STADIUMS[s.jcd]+' '+s.rno+'R｜1号差され'+(s.sas*100).toFixed(0)+'% → '+s.mkboat+s.mkname+'（攻め'+(s.mkatk*100).toFixed(0)+'%）</a>';}).join('<br>')+
+    '<br><span class="note">⚠ <b>高配当だが的中率は低い</b>。連敗中に穴頭を追うと傷が深くなる。狙うなら<b>少額・見送り前提</b>で、まくり本線は「外頭→1→他」。タップで読み込み。</span>';
+}
+document.getElementById('makuri').addEventListener('click',renderMakuri);
 document.getElementById('scanout').addEventListener('click',function(e){
   var a=e.target.closest('.pickrace'); if(!a)return; e.preventDefault();
   var s=DAYRACES[+a.getAttribute('data-i')]; if(!s)return;
