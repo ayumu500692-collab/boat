@@ -303,15 +303,25 @@ function pickIdx(weights,used){
   for(i=weights.length-1;i>=0;i--) if(!used[i]) return i; return 0;
 }
 function simulateRace(boats,cfg,N){
-  N=N||20000; cfg=cfg||CFG;
+  N=N||30000; cfg=cfg||CFG;
   var water=(document.getElementById('water')||{}).value||'calm';
-  var chaosMean= water==='rough'?0.55 : water==='mid'?0.35 : 0.20; // 平均の荒れ度
   var A=winProbs(boats,cfg,'calm'), B=winProbs(boats,cfg,'rough'); // 両極の確率
-  var n=boats.length, p1=new Array(n).fill(0), t3=new Array(n).fill(0), combo={};
+  var n=boats.length;
+  // 1号艇(進入1コース)の差されやすさ→レース全体の荒れ度を底上げ(機力難1号艇レースは荒れる)
+  var c1=-1; for(var i0=0;i0<n;i0++){ if((boats[i0].course||i0+1)===1){c1=i0;break;} }
+  var sas=(c1>=0&&A.sasare)?A.sasare[c1]:0;
+  var chaosMean=(water==='rough'?0.50:water==='mid'?0.32:0.18)+0.35*sas; if(chaosMean>0.85)chaosMean=0.85;
+  // 各艇の"荒れやすさ"(B級・遅STほど着順が振れる=分散大)
+  var jit=boats.map(function(b){var v=0.18,g=b.grade; if(g==='B1'||g==='B2')v+=0.24; else if(g==='A2')v+=0.08; if((b.st||0.18)>=0.185)v+=0.12; return v;});
+  var p1=new Array(n).fill(0), t3=new Array(n).fill(0), combo={};
   var pr=new Array(n), wr=new Array(n), used=new Array(n);
   for(var r=0;r<N;r++){
     var u=chaosMean+(Math.random()-Math.random())*0.4; if(u<0)u=0; if(u>1)u=1; // この試行の荒れ度
-    for(var i=0;i<n;i++){ pr[i]=(1-u)*A.p[i]+u*B.p[i]; wr[i]=(1-u)*A.w[i]+u*B.w[i]; used[i]=false; }
+    for(var i=0;i<n;i++){
+      pr[i]=(1-u)*A.p[i]+u*B.p[i];
+      wr[i]=((1-u)*A.w[i]+u*B.w[i])*Math.exp((Math.random()-0.5)*jit[i]*2); // 着順ゆらぎ(艇ごと)
+      used[i]=false;
+    }
     var a=pickIdx(pr,used); used[a]=true;
     var b=pickIdx(wr,used); used[b]=true;
     var c=pickIdx(wr,used);
@@ -319,7 +329,7 @@ function simulateRace(boats,cfg,N){
     var key=(a+1)+'-'+(b+1)+'-'+(c+1); combo[key]=(combo[key]||0)+1;
   }
   var cp={}; for(var k in combo) cp[k]=combo[k]/N;
-  return {p1:p1.map(function(x){return x/N;}), top3:t3.map(function(x){return x/N;}), comboProb:cp, N:N};
+  return {p1:p1.map(function(x){return x/N;}), top3:t3.map(function(x){return x/N;}), comboProb:cp, N:N, chaos:chaosMean};
 }
 // 3連単: 1着=p, 2・3着=place重みw(spec §4B)。wは省略時pで従来動作
 function trifecta(p,w){
@@ -400,7 +410,7 @@ var LAST=null;
 function render(){
   var boats=readBoats();
   var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p,w:wp.w,str:wp.str,atk:wp.atk,sasare:wp.sasare};
-  LAST.sim=simulateRace(boats,CFG,20000); // 2万回シミュレーション
+  LAST.sim=simulateRace(boats,CFG,30000); // 3万回シミュレーション
   var pr=placeRates(p,wp.w);
   var host=document.getElementById('probs');
   var order=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
@@ -460,7 +470,7 @@ function renderFinal(){
   var f=pickFinal(), boats=LAST.boats, nm=function(i){return (i+1)+' '+(boats[i].name||('艇'+(i+1)));};
   var sim=LAST.sim, P=sim?sim.p1:LAST.p, T3=sim?sim.top3:null;
   var t3s=function(i){return T3?' <span class="note">3着内'+(T3[i]*100).toFixed(0)+'%</span>':'';};
-  var simbadge=sim?'<div class="note" style="margin:0 0 6px">🎲 '+ (sim.N/10000) +'万回シミュレーション結果（レース毎に荒れ度を振って試行）</div>':'';
+  var simbadge=sim?'<div class="note" style="margin:0 0 6px">🎲 '+ (sim.N/10000) +'万回シミュレーション（荒れ度'+(sim.chaos*100).toFixed(0)+'%／艇ごとの分散を反映）</div>':'';
   document.getElementById('finalhead').innerHTML=simbadge+
     '<div class="marks">'+
     '<div class="mk"><span class="mkb mk-honmei">◎</span><span class="mkl">本命</span><span><b>'+nm(f.honmei)+'</b> <span class="note">1着'+(P[f.honmei]*100).toFixed(0)+'%</span></span></div>'+
