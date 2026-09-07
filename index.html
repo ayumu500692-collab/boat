@@ -779,17 +779,26 @@ function scanDay(){
          var c1=-1; for(var q=0;q<bs.length;q++){ if((bs[q].course||q+1)===1){c1=q;break;} }
          var sas=(c1>=0&&wp.sasare)?wp.sasare[c1]:0, outIdx=-1, outAtk=0;
          for(var q2=0;q2<bs.length;q2++){ var cc=bs[q2].course||q2+1; if(cc>=3&&cc<=4&&(wp.atk[q2]||0)>outAtk){outAtk=wp.atk[q2]||0; outIdx=q2;} }
-         scored.push({jcd:jcd,rno:rno,top:top,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr,
-           makuri:sas*outAtk, sas:sas, mkboat:outIdx>=0?outIdx+1:0, mkname:outIdx>=0?(bs[outIdx].name||''):'', mkatk:outAtk});
+         scored.push({jcd:jcd,rno:rno,top:top,gap:gap,v:v,honmei:od[0]+1,name:bs[od[0]].name||'',prog:pr,
+           makuri:sas*outAtk, sas:sas, mkboat:outIdx>=0?outIdx+1:0, mkname:outIdx>=0?(bs[outIdx].name||''):'', mkatk:outAtk,
+           solid:top+gap*0.6-Math.min(sas*outAtk,0.3)*1.5}); // 鉄板度：本命勝率＋2番手差－荒れ
        }catch(err){skipped++;}
      });
      scored.sort(function(a,b){var va=a.v==='🟢'?0:a.v==='🟡'?1:2, vb=b.v==='🟢'?0:b.v==='🟡'?1:2; return va!==vb?va-vb:b.top-a.top;});
      DAYRACES=scored;
      if(!scored.length){out.innerHTML='この日の配信にレースがありませんでした（開催が無い日/日付をご確認ください）。'+(skipped?'<br><span class="note">読み取れなかったデータ形式：'+skipped+'件。1レース分のJSONを共有くれれば直します。</span>':'');return;}
      var g=scored.filter(function(s){return s.v==='🟢';}).length, ye=scored.filter(function(s){return s.v==='🟡';}).length;
+     // 🏆 本日の鉄板No.1（最も堅いレース）
+     var iron=scored.slice().sort(function(a,b){return b.solid-a.solid;})[0];
+     var ironHTML='';
+     if(iron && iron.top>=0.55){
+       ironHTML='<div style="background:rgba(55,211,153,.10);border:1px solid rgba(55,211,153,.4);border-radius:9px;padding:8px 10px;margin-bottom:8px">'+
+         '<b>🏆 本日の鉄板No.1</b>　<a href="#" data-i="'+scored.indexOf(iron)+'" class="pickrace" style="color:var(--plus)">'+STADIUMS[iron.jcd]+' '+iron.rno+'R｜◎'+iron.honmei+iron.name+'</a><br>'+
+         '<span class="note">本命勝率'+(iron.top*100).toFixed(0)+'%・2番手と'+(iron.gap*100).toFixed(0)+'pt差・荒れ度低。<b>ただし実オッズで妙味(実>分岐)を確認してから。堅い≠儲かる。</b></span></div>';
+     }
      var pk=scored.filter(function(s){return s.v==='🟢';}).slice(0,10);
      if(!pk.length) pk=scored.slice(0,8); // 🟢ゼロなら勝率上位を暫定表示
-     out.innerHTML='<b>本日の厳選</b>（全'+scored.length+'R：🟢'+g+' 🟡'+ye+' 🔴'+(scored.length-g-ye)+'）'+(g?'':'　<span class="note">※今日は🟢無し→勝率上位を暫定表示</span>')+'<br>'+
+     out.innerHTML=ironHTML+'<b>本日の厳選</b>（全'+scored.length+'R：🟢'+g+' 🟡'+ye+' 🔴'+(scored.length-g-ye)+'）'+(g?'':'　<span class="note">※今日は🟢無し→勝率上位を暫定表示</span>')+'<br>'+
        pk.map(function(s){return '<a href="#" data-i="'+scored.indexOf(s)+'" class="pickrace" style="color:var(--accent);display:inline-block;padding:3px 0">'+s.v+' '+STADIUMS[s.jcd]+' '+s.rno+'R｜◎'+s.honmei+s.name+' 勝率'+(s.top*100).toFixed(0)+'%</a>';}).join('<br>')+
        '<br><span class="note">タップで読み込み→計算。<b>🟢だけ厚く、🟡は軽く、🔴は見送り</b>が回収率を守る。</span>';
    })
