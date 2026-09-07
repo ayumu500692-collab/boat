@@ -293,6 +293,33 @@ function winProbs(boats,cfg,waterOverride){
   return {p:p,str:str,w:pw.map(function(x){return x/sw;}),
           atk:km.map(function(k){return k.atk;}),sasare:km.map(function(k){return k.sasare;})};
 }
+// ===== 予想家の"票"を数値化（各予想家が別々の観点でボートを評価）=====
+function seerVotes(boats){
+  var atk=LAST.atk||[], p=LAST.p, n=boats.length;
+  function norm(v){var s=v.reduce(function(a,b){return a+b;},0)||1; return v.map(function(x){return x/s;});}
+  var V=[];
+  // 鉄板剛：イン/コース重視
+  V.push(norm(boats.map(function(b,i){var c=clamp((b.course||i+1)-1,0,5); return COURSE_BASE[c]*(1+strength(b));})));
+  // 荒波テツ：攻め力(外の一撃)
+  V.push(norm(boats.map(function(b,i){return Math.max(0.02,(atk[i]||0)*(0.5+strength(b))+0.03);})));
+  // 複勝ナオ：当地3連(3着堅実)
+  V.push(norm(boats.map(function(b,i){return Math.max(0.02,((b.loc3||b.loc||10)/100)*(1+strength(b)));})));
+  // 万舟リク：機力
+  V.push(norm(boats.map(function(b){return Math.max(0.02,(b.motor||10)/100*(1+0.5*strength(b)));})));
+  // AIノヴァ：モデルそのもの
+  V.push(p.slice());
+  return norm(boats.map(function(b,i){return V.reduce(function(a,v){return a+v[i];},0)/V.length;}));
+}
+// ===== 3系統(数値×シミュ×予想家)を融合＋一致度を算出 =====
+function fuseAll(boats){
+  var num=LAST.p.slice(), sim=LAST.sim?LAST.sim.p1.slice():LAST.p.slice(), seer=seerVotes(boats);
+  var wN=0.34,wS=0.34,wP=0.32, fused=boats.map(function(b,i){return wN*num[i]+wS*sim[i]+wP*seer[i];});
+  var s=fused.reduce(function(a,b){return a+b;},0)||1; fused=fused.map(function(x){return x/s;});
+  function tv(a,b){var d=0;for(var i=0;i<a.length;i++)d+=Math.abs(a[i]-b[i]);return d/2;} // 全変動距離
+  var agree=1-(tv(num,sim)+tv(num,seer)+tv(sim,seer))/3; if(agree<0)agree=0;
+  var top=function(v){var t=0;for(var i=1;i<v.length;i++)if(v[i]>v[t])t=i;return t;};
+  return {p:fused, seer:seer, num:num, sim:sim, agree:agree, topNum:top(num), topSim:top(sim), topSeer:top(seer)};
+}
 // ===== モンテカルロ・シミュレーション（レース毎の"荒れ度"を振って2万回試行）=====
 // 平穏(calm)と荒れ(rough)の確率を用意し、各試行でchaosを引いて混ぜる→相関のある決着を再現
 function pickIdx(weights,used){
@@ -411,6 +438,7 @@ function render(){
   var boats=readBoats();
   var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p,w:wp.w,str:wp.str,atk:wp.atk,sasare:wp.sasare};
   LAST.sim=simulateRace(boats,CFG,30000); // 3万回シミュレーション
+  LAST.fused=fuseAll(boats); // 数値×シミュ×予想家の融合
   var pr=placeRates(p,wp.w);
   var host=document.getElementById('probs');
   var order=p.map(function(v,i){return i;}).sort(function(a,b){return p[b]-p[a];});
@@ -449,7 +477,7 @@ function render(){
 var FINPTS=[];
 function pickFinal(){
   var boats=LAST.boats,atk=LAST.atk||[],ix=boats.map(function(b,i){return i;});
-  var sim=LAST.sim, p=sim?sim.p1:LAST.p, top3=sim?sim.top3:null; // シミュレーション優先
+  var sim=LAST.sim, p=(LAST.fused?LAST.fused.p:(sim?sim.p1:LAST.p)), top3=sim?sim.top3:null; // 3系統融合を優先
   var ord=ix.slice().sort(function(a,b){return p[b]-p[a];});
   var used={}; used[ord[0]]=1; used[ord[1]]=1; used[ord[2]]=1;
   // 穴＝残りのうち"3着以内に食い込む率"最大(シミュ)／無ければ攻め力
@@ -468,10 +496,17 @@ function triProb(a,b,c){
 function renderFinal(){
   if(!LAST)return;
   var f=pickFinal(), boats=LAST.boats, nm=function(i){return (i+1)+' '+(boats[i].name||('艇'+(i+1)));};
-  var sim=LAST.sim, P=sim?sim.p1:LAST.p, T3=sim?sim.top3:null;
+  var sim=LAST.sim, fu=LAST.fused, P=fu?fu.p:(sim?sim.p1:LAST.p), T3=sim?sim.top3:null;
   var t3s=function(i){return T3?' <span class="note">3着内'+(T3[i]*100).toFixed(0)+'%</span>':'';};
-  var simbadge=sim?'<div class="note" style="margin:0 0 6px">🎲 '+ (sim.N/10000) +'万回シミュレーション（荒れ度'+(sim.chaos*100).toFixed(0)+'%／艇ごとの分散を反映）</div>':'';
-  document.getElementById('finalhead').innerHTML=simbadge+
+  var simbadge=sim?'<div class="note" style="margin:0 0 4px">🎲 '+ (sim.N/10000) +'万回シミュレーション（荒れ度'+(sim.chaos*100).toFixed(0)+'%）</div>':'';
+  var fusebadge='';
+  if(fu){
+    var ag=fu.agree, ac=ag>=0.72?['🟢','信頼度 高（3系統ほぼ一致）','var(--plus)']:(ag>=0.55?['🟡','中（やや割れ）','var(--warn)']:['🔴','割れ＝見送り寄り','var(--minus)']);
+    var same=(fu.topNum===fu.topSim&&fu.topSim===fu.topSeer);
+    fusebadge='<div class="note" style="margin:0 0 4px">🔀 <b>数値×シミュ×予想家 融合</b>／一致度<b>'+(ag*100).toFixed(0)+'%</b> <span style="color:'+ac[2]+'">'+ac[0]+' '+ac[1]+'</span></div>'+
+      '<div class="note" style="margin:0 0 6px">◎候補：数値 '+(fu.topNum+1)+' ／ シミュ '+(fu.topSim+1)+' ／ 予想家 '+(fu.topSeer+1)+(same?'（3系統一致＝軸信頼）':'（割れ＝軸は固めて手広くしない）')+'</div>';
+  }
+  document.getElementById('finalhead').innerHTML=simbadge+fusebadge+
     '<div class="marks">'+
     '<div class="mk"><span class="mkb mk-honmei">◎</span><span class="mkl">本命</span><span><b>'+nm(f.honmei)+'</b> <span class="note">1着'+(P[f.honmei]*100).toFixed(0)+'%</span></span></div>'+
     '<div class="mk"><span class="mkb mk-chu">○</span><span class="mkl">中堅</span><span><b>'+nm(f.o1)+'</b>'+t3s(f.o1)+'　<b>'+nm(f.o2)+'</b>'+t3s(f.o2)+'</span></div>'+
