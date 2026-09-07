@@ -149,6 +149,7 @@ small.hint{color:var(--mut);font-size:11px}
   <div class="card" id="out" style="display:none">
     <h2>③ 各艇の確率＋レース選定</h2>
     <div id="verdict"></div>
+    <div class="warn" id="scenario" style="display:none"></div>
     <div id="probs"></div>
     <div class="note" id="topnote"></div>
   </div>
@@ -210,6 +211,10 @@ small.hint{color:var(--mut);font-size:11px}
 var GRADE={A1:1.0,A2:0.78,B1:0.5,B2:0.28};
 var COURSE_BASE=[0.55,0.155,0.12,0.105,0.05,0.02]; // コース1..6 基礎勝率(概算)
 var PLACE_CB=[1.0,0.88,0.80,0.72,0.58,0.48];       // 2・3着のコース優位(1着ほど極端でない)
+// 会場イン強度(1コース1着のしやすさ。>1=イン天国 / <1=差し・まくり場)。index=場番号1..24
+var VENUE_IN=[1,0.97,0.86,0.83,0.90,0.98,0.98,1.02,1.00,0.96,0.93,0.90,1.05,1.04,0.97,1.03,1.02,0.98,1.12,1.08,1.00,1.10,0.95,1.02,1.15];
+var VENUE_TRAIT=['','桐生:標準・季節で振れる','戸田:狭水面で差し・まくり多発（イン弱）','江戸川:難水面・荒れやすい（イン弱）','平和島:潮で一変・やや荒れ','多摩川:静水・標準','浜名湖:広く標準','蒲郡:ナイター・イン優勢','常滑:風で荒れる・標準','津:イン平均','三国:差し場・やや荒れ','びわこ:difficult・波で荒れ（イン弱）','住之江:イン強め・堅い','尼崎:狭くインやや強','鳴門:潮で荒れることも','丸亀:ナイター・イン強め','児島:干満で一変・イン平均','宮島:潮・標準','徳山:イン天国（1コース堅い）','下関:ナイター・イン強い','若松:ナイター・荒れも','芦屋:イン強い・堅い','福岡:うねり・差し場（イン弱め）','唐津:イン強め','大村:全国屈指のイン天国（1逃げ堅い）'];
+var CUR_VEN=1; // 現在計算中レースの会場イン強度
 // v2重み: 級別を下げ、実績(2連/当地3連)を主に
 var W={grade:0.12, nat:0.24, loc:0.16, loc3:0.14, motor:0.18, st:0.16};
 var K=1.3;         // コース×実力の効き(既定)
@@ -266,7 +271,11 @@ function kimarite(boats){
 function winProbs(boats,cfg,waterOverride){
   cfg=cfg||CFG; var KK=cfg.K>0?cfg.K:K, T=cfg.T>0?cfg.T:1.0;
   var w=waterOverride||(document.getElementById('water')||{}).value||'calm';
-  var cb=waterCB(w);
+  var cb=waterCB(w).slice();
+  // 会場イン強度：イン天国は1コース加点／差し場は1コース減点＋3-4コース台頭
+  var vi=CUR_VEN||1; cb[0]*=vi;
+  if(vi<1){ cb[3]*=1+(1-vi)*0.9; cb[2]*=1+(1-vi)*0.6; }
+  else if(vi>1){ cb[3]*=1-(vi-1)*0.5; cb[2]*=1-(vi-1)*0.3; }
   var mBonus=w==='rough'?0.14:(w==='mid'?0.06:0); // 荒れ×好機力の相互作用
   var adj=tenjiAdj(boats);
   var km=kimarite(boats);
@@ -324,6 +333,28 @@ function fuseAll(boats){
   var agree=1-(tv(num,sim)+tv(num,seer)+tv(sim,seer))/3; if(agree<0)agree=0;
   var top=function(v){var t=0;for(var i=1;i<v.length;i++)if(v[i]>v[t])t=i;return t;};
   return {p:fused, seer:seer, num:num, sim:sim, agree:agree, topNum:top(num), topSim:top(sim), topSeer:top(seer)};
+}
+// ===== 展開予想（レースストーリー）＝数値から筋書きを言語化 =====
+function raceScenario(){
+  if(!LAST)return '';
+  var boats=LAST.boats, P=LAST.fused?LAST.fused.p:LAST.p, atk=LAST.atk||[], sas=LAST.sasare||[], chaos=LAST.sim?LAST.sim.chaos:0.3, jcd=LAST.jcd||0;
+  var ix=boats.map(function(b,i){return i;}), ord=ix.slice().sort(function(a,b){return P[b]-P[a];});
+  var nm=function(i){return (i+1)+(boats[i].name||'艇'+(i+1));};
+  var cof=function(i){return boats[i].course||i+1;};
+  var c1=-1; for(var i=0;i<boats.length;i++){if(cof(i)===1){c1=i;break;}} if(c1<0)c1=0;
+  var attackers=ix.filter(function(i){return cof(i)>=2&&i!==ord[0];}).sort(function(a,b){return (atk[b]||0)-(atk[a]||0);});
+  var s='<b>🎬 展開予想：</b>';
+  if(ord[0]===c1) s+=nm(c1)+'の逃げが本線（'+(P[ord[0]]*100).toFixed(0)+'%）。';
+  else s+='1コース'+nm(c1)+'は本命でなく、<b>'+nm(ord[0])+'</b>が中心。';
+  if(c1===ord[0]){
+    var risks=[]; if((sas[c1]||0)>=0.35)risks.push('差され率'+((sas[c1])*100).toFixed(0)+'%'); if((boats[c1].motor||0)>0&&(boats[c1].motor||0)<32)risks.push('機力難'); if((boats[c1].st||0)>=0.18)risks.push('ST遅め');
+    s+= risks.length?'ただし'+risks.join('・')+'で盤石でない。':'ST・機力とも不安なく堅い。';
+  }
+  if(attackers.length){ var a0=attackers[0]; s+='相手筆頭は<b>'+nm(a0)+'</b>（'+cof(a0)+'コース・攻め力'+((atk[a0]||0)*100).toFixed(0)+'%）。'; }
+  if(chaos>=0.34&&attackers.length) s+='荒れれば'+nm(attackers[0])+'のまくり一撃も。';
+  if(chaos<0.24) s+='水面は落ち着き、順当決着の公算。';
+  var trait=VENUE_TRAIT[jcd]; if(trait) s+='<br><span class="note">🏟 '+trait+'</span>';
+  return s;
 }
 // ===== ◎本命の信頼度スコア（多要素・0-100）=====
 function honmeiConfidence(){
@@ -473,7 +504,8 @@ function fmtC(c){return c.join('-');}
 var LAST=null;
 function render(){
   var boats=readBoats();
-  var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p,w:wp.w,str:wp.str,atk:wp.atk,sasare:wp.sasare};
+  var jcd0=+((document.getElementById('jcd')||{}).value)||0; CUR_VEN=VENUE_IN[jcd0]||1; // 会場イン強度を反映
+  var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p,w:wp.w,str:wp.str,atk:wp.atk,sasare:wp.sasare,jcd:jcd0};
   LAST.sim=simulateRace(boats,CFG,30000); // 3万回シミュレーション
   LAST.fused=fuseAll(boats); // 数値×シミュ×予想家の融合
   var pr=placeRates(p,wp.w);
@@ -503,6 +535,7 @@ function render(){
   else if(top>=0.48){vc='v-mid';vt='🟡 中庸';vs='本命はいるが盤石でない（'+nm0+' 勝率'+(top*100).toFixed(0)+'%）。妙味(実オッズ>分岐)が出た目だけ軽く。';stake='推奨：<b>3点以下・軽く（妙味だけ）or 見送り</b>。広く張らない（9点ベタ張りはNG）。';}
   else {vc='v-bad';vt='🔴 難解・見送り寄り';vs='軸がぐらつく（トップ勝率'+(top*100).toFixed(0)+'%の混戦）。明確な妙味が無ければ見送りが正解（見送りも成果）。';stake='推奨：<b>基本は見送り</b>。打つなら¥500の遊びで1〜2点まで。';}
   document.getElementById('verdict').innerHTML='<div class="verdict '+vc+'">'+vt+'<small>'+vs+'</small><small style="color:var(--ink)">'+stake+'</small></div>';
+  var scn=document.getElementById('scenario'); var scnHTML=raceScenario(); scn.innerHTML=scnHTML; scn.style.display=scnHTML?'':'none';
   document.getElementById('out').style.display='';
   renderFinal();
   document.getElementById('outf').style.display='';
@@ -750,6 +783,7 @@ function renderNote(){
   var note='【'+venue+' 数値予想】独自ツール発\n\n'+
     '▼レース質：'+q+'（本命勝率'+(top*100).toFixed(0)+'%）\n\n'+
     '▼予想印\n◎本命　'+nm(f.honmei)+'（勝率'+(top*100).toFixed(0)+'%）\n○中堅　'+nm(f.o1)+'・'+nm(f.o2)+'\n▲穴　　'+nm(f.ana)+'\n\n'+
+    '▼展開\n'+stripTags((raceScenario()||'').replace(/<br>/g,' / '))+'\n\n'+
     '────────────\n【ここから有料】\n\n'+
     '▼買い目（◎→○→穴）\n'+(lines.length?lines.join('\n'):'（アプリで実オッズを入れると、EV≥1.1の妙味目と資金配分がここに入ります）')+'\n\n'+
     '▼結論\n'+(NOTEDATA.deskCall||'')+'\n最高顧問の判断：'+(NOTEDATA.bossJudge||'')+'\n'+(NOTEDATA.bossWord||'')+'\n\n'+
@@ -842,6 +876,7 @@ function scanDay(){
        try{
          var jcd=num(pick(pr,["race_stadium_number","stadium","jcd"])), rno=num(pick(pr,["race_number","race_no","rno"]));
          var bs=mapBoats(pr); if(!bs.length||!bs[0].nat){skipped++;return;}
+         CUR_VEN=VENUE_IN[jcd]||1; // 会場イン強度
          var wp=winProbs(bs), P=wp.p;
          var od=P.map(function(v,i){return i;}).sort(function(a,b){return P[b]-P[a];});
          var top=P[od[0]], gap=top-P[od[1]];
