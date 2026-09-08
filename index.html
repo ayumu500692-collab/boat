@@ -176,7 +176,7 @@ small.hint{color:var(--mut);font-size:11px}
       <label class="mini">点数 <select id="fpts"><option value="3">3点</option><option value="5" selected>5点</option><option value="7">7点</option></select></label>
       <label class="mini">💰予算¥ <input id="fbudget" type="number" value="10000" step="500" style="width:82px"></label>
     </div>
-    <div class="note" style="margin:0 0 3px"><b>3連単</b>（高配当・当たりにくい）</div>
+    <div class="note" style="margin:0 0 3px"><b>3連単</b>（高配当・当たりにくい）<span id="fcov"></span></div>
     <div style="overflow-x:auto"><table class="tri"><thead><tr><th>段</th><th>買い目</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>¥配分</th></tr></thead><tbody id="ftri"></tbody></table></div>
     <div class="note" id="fnote"></div>
     <div class="note" style="margin:12px 0 3px"><b>🎫 3連複</b>（順不同で3艇＝<b class="plus">当たりやすい</b>・配当低め。当てて続けたい時はこっち）</div>
@@ -686,19 +686,35 @@ function renderFinal(){
     '<div class="mk"><span class="mkb mk-ana">▲</span><span class="mkl">穴</span><span><b>'+nm(f.ana)+'</b>'+t3s(f.ana)+' <span class="note">一発（本命が飛んだ時）</span></span></div>'+
     '</div>';
   var H=f.honmei,A=f.o1,B=f.o2,X=f.ana;
-  // ◎○穴の4艇から全並び(24通り)を作り、シミュ確率の高い順に買い目化(1-5-3のような並びも拾える)
   var mk={}; mk[H]='◎'; mk[A]='○'; mk[B]='○'; mk[X]='穴';
-  var pool=[H,A,B,X], all=[];
-  for(var i0=0;i0<4;i0++)for(var j0=0;j0<4;j0++)for(var k0=0;k0<4;k0++){
-    if(i0===j0||i0===k0||j0===k0)continue;
-    var a0=pool[i0],b0=pool[j0],c0=pool[k0], pr0=triProb(a0,b0,c0);
-    all.push({combo:[a0,b0,c0],role:mk[a0]+'-'+mk[b0]+'-'+mk[c0],leg:(a0===H?'nige':'tobi'),prob:pr0,be:pr0>0?1/pr0:9999});
+  var rl=function(i){return mk[i]||'―';};
+  // 「絞った点数」の的中率を最大化：シミュ全分布から最も起きやすい順に3連単を採用。
+  // ◎○穴の4艇枠に縛らず全展開を候補にするので、3点でも取りこぼしが減る＝3点予想の引き上げ。
+  var all=[];
+  if(sim&&sim.comboProb){
+    all=Object.keys(sim.comboProb).map(function(k){
+      var c=k.split('-').map(function(x){return +x-1;});
+      var pr0=sim.comboProb[k];
+      return {combo:c, role:rl(c[0])+'-'+rl(c[1])+'-'+rl(c[2]), leg:(c[0]===H?'nige':'tobi'), prob:pr0, be:pr0>0?1/pr0:9999};
+    });
+  }else{
+    var pool=[H,A,B,X];
+    for(var i0=0;i0<4;i0++)for(var j0=0;j0<4;j0++)for(var k0=0;k0<4;k0++){
+      if(i0===j0||i0===k0||j0===k0)continue;
+      var a0=pool[i0],b0=pool[j0],c0=pool[k0], pr0=triProb(a0,b0,c0);
+      all.push({combo:[a0,b0,c0],role:rl(a0)+'-'+rl(b0)+'-'+rl(c0),leg:(a0===H?'nige':'tobi'),prob:pr0,be:pr0>0?1/pr0:9999});
+    }
   }
   all.sort(function(x,y){return y.prob-x.prob;}); // 起きやすい順
   var npt=+document.getElementById('fpts').value||5;
   FINPTS=all.slice(0,npt);
+  // この点数で3連単が当たる確率の目安（累計カバー率）
+  var fcov=FINPTS.reduce(function(s,o){return s+(o.prob||0);},0);
+  var fcovEl=document.getElementById('fcov');
+  if(fcovEl) fcovEl.innerHTML=FINPTS.length?(' ／ この<b>'+npt+'点</b>で的中率の目安 <b style="color:var(--accent)">'+(fcov*100).toFixed(0)+'%</b>（±0配当'+(fcov>0?(npt/fcov).toFixed(0):'–')+'倍）'):'';
   document.getElementById('ftri').innerHTML=FINPTS.map(function(o,i){
-    return '<tr data-i="'+i+'"><td class="note" style="text-align:left;white-space:nowrap">'+o.role+'</td><td><b>'+o.combo.map(function(x){return x+1;}).join('-')+'</b></td><td>'+o.be.toFixed(1)+'</td>'+
+    var cum=FINPTS.slice(0,i+1).reduce(function(s,x){return s+x.prob;},0);
+    return '<tr data-i="'+i+'"><td class="note" style="text-align:left;white-space:nowrap">'+o.role+'</td><td><b>'+o.combo.map(function(x){return x+1;}).join('-')+'</b> <span class="note">累'+(cum*100).toFixed(0)+'%</span></td><td>'+o.be.toFixed(1)+'</td>'+
       '<td><input type="number" class="fodds" step="0.1" placeholder="入力" style="width:56px"></td><td class="fev">–</td><td class="fyen" style="white-space:nowrap">–</td></tr>';
   }).join('');
   renderBox();
