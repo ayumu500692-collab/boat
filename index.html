@@ -1107,19 +1107,34 @@ document.getElementById('backtest').addEventListener('click',magicBacktest);
 
 // ===== 🏆 予想家トーナメント（各予想家の◎を実結果で採点し順位づけ）=====
 function predictorPicks(bs,wp){
+  // 各予想家＝「得意の観点(主)×勝てる文脈(従)」で◎を1点選ぶ。
+  // 従来は単一指標の最大値だけ→構造的に勝てない艇（外枠の高成績選手など）を掴んで的中率を落としていた。
+  // 勝てる文脈(wp.p:1着確率)を掛けることで、各家の"角度"は保ったまま、非現実的な頭選びを排除する＝精度向上。
   var ix=bs.map(function(b,i){return i;}), c1=0; for(var i=0;i<bs.length;i++){if((bs[i].course||i+1)===1){c1=i;break;}}
-  var mx=function(f){return ix.slice().sort(function(a,b){return f(bs[b],b)-f(bs[a],b);})[0];};
-  var pTop=0; for(var q=1;q<wp.p.length;q++)if(wp.p[q]>wp.p[pTop])pTop=q;
-  var pr=placeRates(wp.p,wp.w), t3=0; for(var q2=1;q2<pr.top3.length;q2++)if(pr.top3[q2]>pr.top3[t3])t3=q2;
+  var atk=wp.atk||[], p=wp.p;
+  var pr=placeRates(p,wp.w||p);
+  var strg=function(b){return (typeof strength==='function')?strength(b):0;};
+  var cof=function(i){return bs[i].course||i+1;};
+  var wc=function(i){return 0.30+(p[i]||0);};           // 勝てる文脈 0.30〜1.30
+  var argmax=function(f){return ix.slice().sort(function(a,b){return f(b)-f(a);})[0];};
+  var pTop=0; for(var q=1;q<p.length;q++)if(p[q]>p[pTop])pTop=q;
   return [
-    {k:'go',ic:'🅰',nm:'鉄板 剛（イン）',idx:c1},
+    // 剛：イン党。1コースが逃げ切れる文脈なら1、極端に弱ければ最上位確率へ寄せる保険
+    {k:'go',ic:'🅰',nm:'鉄板 剛（イン）',idx:(p[c1]>=0.34?c1:pTop)},
+    // ノヴァ：モデル最上位（融合）
     {k:'nova',ic:'🅵',nm:'AIノヴァ（融合）',idx:pTop},
-    {k:'ren',ic:'🅲',nm:'確率屋レン（全国2連）',idx:mx(function(b){return b.nat||0;})},
-    {k:'nao',ic:'🅶',nm:'複勝ナオ（当地3連）',idx:mx(function(b){return b.loc3||b.loc||0;})},
-    {k:'riku',ic:'🅸',nm:'万舟リク（機力）',idx:mx(function(b){return b.motor||0;})},
-    {k:'hayato',ic:'🅳',nm:'時計ハヤト（ST）',idx:mx(function(b){return -(b.st||0.2);})},
-    {k:'tetsu',ic:'🅱',nm:'荒波テツ（攻め・外）',idx:mx(function(b,i){return (wp.atk[i]||0)+((b.course||i+1)>=3?0.2:0);})},
-    {k:'jin',ic:'🅷',nm:'回収ジン（複勝堅実）',idx:t3}
+    // レン：全国2連の主×勝てる文脈→"強い選手が現実に頭になる艇"
+    {k:'ren',ic:'🅲',nm:'確率屋レン（全国2連）',idx:argmax(function(i){return (bs[i].nat||0)*wc(i);})},
+    // ナオ：当地3連×複勝率×文脈→堅実に上位に絡む艇（◎的中も底上げ）
+    {k:'nao',ic:'🅶',nm:'複勝ナオ（当地3連）',idx:argmax(function(i){return (bs[i].loc3||bs[i].loc||0)*(0.6+pr.top3[i])*wc(i);})},
+    // リク：機力主体。外枠一撃の角度は残しつつ、勝てる文脈で下支え
+    {k:'riku',ic:'🅸',nm:'万舟リク（機力）',idx:argmax(function(i){return (bs[i].motor||0)*(0.25+(p[i]||0))*(cof(i)>=3?1.15:1);})},
+    // ハヤト：ST最速を"連に絡む範囲で"選ぶ
+    {k:'hayato',ic:'🅳',nm:'時計ハヤト（ST）',idx:argmax(function(i){return (0.20-(bs[i].st||0.20))*wc(i);})},
+    // テツ：攻め・外の穴頭（角度維持＝的中率は低め＝穴狙いの現実を示す）
+    {k:'tetsu',ic:'🅱',nm:'荒波テツ（攻め・外）',idx:argmax(function(i){return (atk[i]||0)*(0.4+strg(bs[i]))+(cof(i)>=3?0.15:0);})},
+    // ジン：複勝堅実×文脈→頭でも取れる堅い艇
+    {k:'jin',ic:'🅷',nm:'回収ジン（複勝堅実）',idx:argmax(function(i){return pr.top3[i]*(0.5+(p[i]||0));})}
   ];
 }
 function predictorTourney(){
