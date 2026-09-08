@@ -368,18 +368,26 @@ function winProbs(boats,cfg,waterOverride){
 }
 // ===== 予想家の"票"を数値化（各予想家が別々の観点でボートを評価）=====
 function seerVotes(boats){
-  var atk=LAST.atk||[], p=LAST.p, n=boats.length;
+  var atk=LAST.atk||[], sas=LAST.sasare||[], p=LAST.p, n=boats.length;
   function norm(v){var s=v.reduce(function(a,b){return a+b;},0)||1; return v.map(function(x){return x/s;});}
+  var cof=function(b,i){return b.course||i+1;};
+  // 1号艇の差され率（レース全体の"荒れ"係数＝テツの攻め評価に連動）
+  var s1=(function(){for(var i=0;i<n;i++)if(cof(boats[i],i)===1)return sas[i]||0;return 0;})();
   var V=[];
-  // 鉄板剛：イン/コース重視＋実測1着率(cwin)を強く評価
-  V.push(norm(boats.map(function(b,i){var c=clamp((b.course||i+1)-1,0,5); var cw=b.cwin>0?b.cwin/100:0; return COURSE_BASE[c]*(1+strength(b))*(1+1.3*cw);})));
-  // 荒波テツ：攻め力(外の一撃)
-  V.push(norm(boats.map(function(b,i){return Math.max(0.02,(atk[i]||0)*(0.5+strength(b))+0.03);})));
-  // 複勝ナオ：当地3連(3着堅実)
-  V.push(norm(boats.map(function(b,i){return Math.max(0.02,((b.loc3||b.loc||10)/100)*(1+strength(b)));})));
-  // 万舟リク：機力
-  V.push(norm(boats.map(function(b){return Math.max(0.02,(b.motor||10)/100*(1+0.5*strength(b)));})));
-  // AIノヴァ：モデルそのもの
+  // 鉄板剛：イン×実力×実測1着率。ただし差され率が高い1号艇は割引＝弱いインを盲信しない
+  V.push(norm(boats.map(function(b,i){
+    var c=clamp(cof(b,i)-1,0,5), cw=b.cwin>0?b.cwin/100:0;
+    var v=COURSE_BASE[c]*(1+strength(b))*(1+1.3*cw);
+    if(cof(b,i)===1) v*=(1-0.6*(sas[i]||0));           // 逃げ崩れを票に反映
+    return Math.max(0.01,v);
+  })));
+  // 荒波テツ：攻め力(外の一撃)×実力。1号艇が差されやすいレースほど攻めを厚く見る
+  V.push(norm(boats.map(function(b,i){return Math.max(0.02,(atk[i]||0)*(0.5+strength(b))*(1+0.8*s1)+0.03);})));
+  // 複勝ナオ：当地3連×実力×コース優位＝外枠の高3連率だけで頭に祭り上げない
+  V.push(norm(boats.map(function(b,i){var c=clamp(cof(b,i)-1,0,5); return Math.max(0.02,((b.loc3||b.loc||10)/100)*(1+strength(b))*(0.5+PLACE_CB[c]));})));
+  // 万舟リク：機力×ST×コース地の利＝良機力でも進入・STが悪ければ割り引く
+  V.push(norm(boats.map(function(b,i){var c=clamp(cof(b,i)-1,0,5), stq=clamp((0.21-(b.st||0.18))/0.09,0,1); return Math.max(0.02,(b.motor||10)/100*(0.4+0.6*stq)*(0.5+COURSE_BASE[c]/0.55)*(1+0.4*strength(b)));})));
+  // AIノヴァ：モデルそのもの（数値融合の基準）
   V.push(p.slice());
   return norm(boats.map(function(b,i){return V.reduce(function(a,v){return a+v[i];},0)/V.length;}));
 }
