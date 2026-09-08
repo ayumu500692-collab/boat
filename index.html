@@ -109,6 +109,21 @@ small.hint{color:var(--mut);font-size:11px}
 <main>
   <div class="warn">⚠ 数字は<b>感情のミスを消す</b>が、<b>当たりは保証しない</b>（控除率25%＋分散／転覆・エンストは数値に出ない）。これは"ブレない軸"であって"必勝法"ではない。<b>可能性でなく「妙味(実オッズ&gt;分岐)」だけを買う。</b></div>
 
+  <div class="card" id="guardcard" style="border-color:#d9a441">
+    <h2>🛡 資金ガード <span class="tag">過剰投資を止める</span></h2>
+    <div class="grid2" style="margin-bottom:6px">
+      <label class="mini">総資金¥ <input id="gbank" type="number" step="1000" placeholder="例50000" style="width:96px"></label>
+      <span class="note" style="margin:0">1レース上限 <b id="gracelim" style="color:var(--accent)">–</b> ／ 1日上限 <b id="gdaylim" style="color:var(--accent)">–</b>（自動）</span>
+    </div>
+    <div class="grid2" style="margin-bottom:6px">
+      <label class="mini">今日の投資 <b id="gspent">¥0</b></label>
+      <input id="grec" type="number" placeholder="打った額" style="width:96px">
+      <button class="btn ghost" id="gadd" style="width:auto;margin:0;padding:6px 12px">＋記録</button>
+      <button class="btn ghost" id="greset" style="width:auto;margin:0;padding:6px 10px;font-size:12px">今日をリセット</button>
+    </div>
+    <div class="note" id="gwarn">総資金を入れると、1レース上限(4%)・1日上限(10%)を自動設定。打った額を記録すると、上限超過・取り返し増額を警告します。</div>
+  </div>
+
   <div class="card">
     <h2>① レースを指定して自動取得 <span class="tag auto">自動</span></h2>
     <div class="grid2">
@@ -223,6 +238,42 @@ var CWIN_BLEND=0.5; // 実測1着率の混合率(段階A)
 var CFG={K:K,T:1.0};
 try{var _cfg=JSON.parse(localStorage.getItem('bn_cfg')||'null'); if(_cfg&&_cfg.K>0){CFG.K=_cfg.K; CFG.T=_cfg.T>0?_cfg.T:1.0;}}catch(e){}
 function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+
+// ===== 🛡 資金ガード（過剰投資抑制）＝予測ツールに一体化した破産防止機構 =====
+var GUARD={bank:0,day:'',spent:0,last:0};
+function saveGuard(){try{localStorage.setItem('bn_guard',JSON.stringify(GUARD));}catch(e){}}
+function gRaceLimit(){return GUARD.bank?Math.max(500,Math.round(GUARD.bank*0.04/100)*100):0;}
+function gDayLimit(){return GUARD.bank?Math.max(1000,Math.round(GUARD.bank*0.10/100)*100):0;}
+function renderGuard(){
+  var rl=gRaceLimit(), dl=gDayLimit();
+  var g1=document.getElementById('gracelim'),g2=document.getElementById('gdaylim'),g3=document.getElementById('gspent');
+  if(!g1)return;
+  g1.textContent=rl?('¥'+rl):'–'; g2.textContent=dl?('¥'+dl):'–'; g3.textContent='¥'+GUARD.spent;
+  var w='';
+  if(GUARD.bank){ var left=dl-GUARD.spent;
+    if(GUARD.spent>=dl) w='<b class="minus">🚫 本日の上限に到達。今日はもう打たない＝それが規律。</b>';
+    else w='本日あと <b class="plus">¥'+left+'</b> まで（1レース上限 ¥'+rl+'／総資金の4%）。'; }
+  document.getElementById('gwarn').innerHTML=w;
+}
+function guardInit(){
+  try{var g=JSON.parse(localStorage.getItem('bn_guard')||'null'); if(g&&typeof g.bank!=='undefined')GUARD=g;}catch(e){}
+  var today=(new Date()).toISOString().slice(0,10);
+  if(GUARD.day!==today){GUARD.day=today;GUARD.spent=0;GUARD.last=0;saveGuard();}
+  var gb=document.getElementById('gbank'); if(gb)gb.value=GUARD.bank||'';
+  renderGuard();
+  if(gb)gb.addEventListener('input',function(){GUARD.bank=+this.value||0;saveGuard();renderGuard();});
+  var ga=document.getElementById('gadd'); if(ga)ga.addEventListener('click',function(){
+    var a=+document.getElementById('grec').value||0; if(a<=0)return;
+    var msgs=[], rl=gRaceLimit();
+    if(GUARD.bank&&a>rl) msgs.push('⚠ 1レース上限 ¥'+rl+' 超過（総資金の'+(a/GUARD.bank*100).toFixed(0)+'%）。張りすぎ。');
+    if(GUARD.last&&a>GUARD.last*1.4) msgs.push('🚫 前回 ¥'+GUARD.last+' より高額＝<b>取り返し(増額)の疑い</b>。これが9/7の負け筋。増やすな。');
+    GUARD.spent+=a; GUARD.last=a; saveGuard(); document.getElementById('grec').value='';
+    renderGuard();
+    if(GUARD.bank&&GUARD.spent>=gDayLimit()) msgs.push('🚫 本日上限に到達。ここで止めるのが今日の"勝ち"。');
+    if(msgs.length) document.getElementById('gwarn').innerHTML=msgs.join('<br>');
+  });
+  var gr=document.getElementById('greset'); if(gr)gr.addEventListener('click',function(){GUARD.spent=0;GUARD.last=0;saveGuard();renderGuard();});
+}
 // F/L(フライング・出遅れ)持ちのスタート自重ペナルティ(確定データ)。F1/L1=軽/F2以上=重
 function flPen(b){var f=(b.fl||'').toString().toUpperCase(); if(!f)return 0; var n=(f.match(/[FL]?\s*([2-9])/)||[])[1]; if((/F2|L2|[FL]\s*[2-9]/).test(f)||n>=2)return 0.10; if((/[FL]/).test(f))return 0.055; return 0;}
 function strength(b){
@@ -658,7 +709,8 @@ function allocFinal(){
   else if(conf>=68&&topEV>=1.2) gp='<b class="plus">🔥 ゴリ押し候補</b>：信頼度'+conf.toFixed(0)+' × 妙味あり(最大EV'+topEV.toFixed(2)+')。<b>上限内で厚く</b>OK。ただし<b>取り返しの増額は禁止</b>。';
   else if(conf<55) gp='<b class="minus">本命が弱い</b>（信頼度'+conf.toFixed(0)+'）＝ゴリ押し不可。妙味の'+fund.length+'点を軽く or 見送り。';
   else gp='信頼度'+conf.toFixed(0)+'＝中程度。妙味'+fund.length+'点を<b>通常配分（厚張りはしない）</b>。';
-  document.getElementById('fnote').innerHTML=(hasOdds?'妙味'+fund.length+'点に配分。':'※オッズ未入力→確率で仮配分。')+' 計¥'+total+'（逃げ'+Math.round(bn/(budget||1)*100)+'：飛び'+Math.round(bt/(budget||1)*100)+'）。<br>'+gp;
+  var guardMsg=''; if(GUARD.bank&&budget>gRaceLimit()) guardMsg='<br><b class="minus">🛡 予算¥'+budget+'は1レース上限¥'+gRaceLimit()+'（総資金の4%）超過。'+gRaceLimit()+'に下げて。</b>';
+  document.getElementById('fnote').innerHTML=(hasOdds?'妙味'+fund.length+'点に配分。':'※オッズ未入力→確率で仮配分。')+' 計¥'+total+'（逃げ'+Math.round(bn/(budget||1)*100)+'：飛び'+Math.round(bt/(budget||1)*100)+'）。<br>'+gp+guardMsg;
   if(LAST) renderParade(); // ④のオッズでレン/ケイ/デスクの見立ても更新
 }
 document.getElementById('fpts').addEventListener('change',renderFinal);
@@ -1074,6 +1126,7 @@ function pick(o,ks){for(var i=0;i<ks.length;i++){if(o&&o[ks[i]]!=null)return o[k
     if(lj)document.getElementById('jcd').value=lj;
     if(lr)document.getElementById('rno').value=lr;
   }catch(e){}
+  guardInit(); // 🛡 資金ガード起動
 })();
 function mapBoats(race){
   var boats=race.boats||race.racers||[];
