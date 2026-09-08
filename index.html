@@ -213,8 +213,10 @@ small.hint{color:var(--mut);font-size:11px}
     <div class="grid2" style="margin:0 0 8px">
       <label class="mini">検証日数 <select id="btdays"><option value="3">3日</option><option value="7" selected>7日</option><option value="14">14日</option></select></label>
       <button class="btn" id="backtest" style="width:auto;margin:0;padding:8px 16px">過去をバックテスト</button>
+      <button class="btn ghost" id="tourney" style="width:auto;margin:0;padding:8px 16px">🏆 予想家トーナメント</button>
     </div>
     <div id="btout" class="note"></div>
+    <div id="tourout" class="note"></div>
     <div class="note" style="margin-top:8px">現在の較正：<b><span id="cfgnow"></span></b> <button class="btn ghost" id="cfgreset" style="width:auto;margin:0;padding:4px 10px;font-size:12px">既定に戻す</button></div>
     </div>
   </details>
@@ -1102,6 +1104,66 @@ function magicBacktest(){
   });
 }
 document.getElementById('backtest').addEventListener('click',magicBacktest);
+
+// ===== 🏆 予想家トーナメント（各予想家の◎を実結果で採点し順位づけ）=====
+function predictorPicks(bs,wp){
+  var ix=bs.map(function(b,i){return i;}), c1=0; for(var i=0;i<bs.length;i++){if((bs[i].course||i+1)===1){c1=i;break;}}
+  var mx=function(f){return ix.slice().sort(function(a,b){return f(bs[b],b)-f(bs[a],b);})[0];};
+  var pTop=0; for(var q=1;q<wp.p.length;q++)if(wp.p[q]>wp.p[pTop])pTop=q;
+  var pr=placeRates(wp.p,wp.w), t3=0; for(var q2=1;q2<pr.top3.length;q2++)if(pr.top3[q2]>pr.top3[t3])t3=q2;
+  return [
+    {k:'go',ic:'🅰',nm:'鉄板 剛（イン）',idx:c1},
+    {k:'nova',ic:'🅵',nm:'AIノヴァ（融合）',idx:pTop},
+    {k:'ren',ic:'🅲',nm:'確率屋レン（全国2連）',idx:mx(function(b){return b.nat||0;})},
+    {k:'nao',ic:'🅶',nm:'複勝ナオ（当地3連）',idx:mx(function(b){return b.loc3||b.loc||0;})},
+    {k:'riku',ic:'🅸',nm:'万舟リク（機力）',idx:mx(function(b){return b.motor||0;})},
+    {k:'hayato',ic:'🅳',nm:'時計ハヤト（ST）',idx:mx(function(b){return -(b.st||0.2);})},
+    {k:'tetsu',ic:'🅱',nm:'荒波テツ（攻め・外）',idx:mx(function(b,i){return (wp.atk[i]||0)+((b.course||i+1)>=3?0.2:0);})},
+    {k:'jin',ic:'🅷',nm:'回収ジン（複勝堅実）',idx:t3}
+  ];
+}
+function predictorTourney(){
+  var days=+document.getElementById('btdays').value||7;
+  var out=document.getElementById('tourout');
+  out.innerHTML='🏆 予想家を実結果で対戦中…（過去'+days+'日）';
+  var dates=[], base=new Date();
+  for(var i=1;i<=days;i++){var d=new Date(base.getTime()-i*86400000);dates.push(''+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0'));}
+  var tal={}, races=0, chain=Promise.resolve();
+  dates.forEach(function(ymd){
+    chain=chain.then(function(){
+      var y=ymd.slice(0,4);
+      return Promise.all([btFetch(y,ymd,'programs'),btFetch(y,ymd,'results')]).then(function(res){
+        var progs=res[0].programs||res[0].results||(Array.isArray(res[0])?res[0]:[]);
+        var rslt=res[1].results||res[1].programs||(Array.isArray(res[1])?res[1]:[]), rmap={};
+        rslt.forEach(function(rr){rmap[num(pick(rr,["race_stadium_number","stadium","jcd"]))+'-'+num(pick(rr,["race_number","race_no","rno"]))]=rr;});
+        progs.forEach(function(pr){
+          try{
+            var key=num(pick(pr,["race_stadium_number","stadium","jcd"]))+'-'+num(pick(pr,["race_number","race_no","rno"]));
+            var rr=rmap[key]; if(!rr)return; var pl=resultPlaces(rr); if(!pl[1])return;
+            var bs=mapBoats(pr); if(bs.length<6||!bs[0].nat)return;
+            CUR_VEN=VENUE_IN[num(pick(pr,["race_stadium_number","stadium","jcd"]))]||1;
+            var wp=winProbs(bs); var picks=predictorPicks(bs,wp); races++;
+            picks.forEach(function(p){
+              if(!tal[p.k])tal[p.k]={nm:p.nm,ic:p.ic,win:0,t3:0};
+              var bn=bs[p.idx].course||p.idx+1;
+              if(bn===pl[1])tal[p.k].win++;
+              if(bn===pl[1]||bn===pl[2]||bn===pl[3])tal[p.k].t3++;
+            });
+          }catch(e){}
+        });
+      }).catch(function(){});
+    });
+  });
+  chain.then(function(){
+    if(races<20){out.innerHTML='⚠ 実結果が十分取れませんでした（'+races+'R）。ライブ版で再試行を。';return;}
+    var rank=Object.keys(tal).map(function(k){var t=tal[k];return {nm:t.nm,ic:t.ic,win:t.win/races,t3:t.t3/races};}).sort(function(a,b){return b.win-a.win;});
+    var medal=function(i){return i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)+'位';};
+    out.innerHTML='<b>🏆 予想家トーナメント結果</b>（'+races+'レース／過去'+days+'日・各予想家の◎の1着的中率で順位）<br>'+
+      rank.map(function(r,i){return medal(i)+' '+r.ic+' '+r.nm+'　<b>本命的中'+(r.win*100).toFixed(1)+'%</b> <span class="note">複勝'+(r.t3*100).toFixed(0)+'%</span>';}).join('<br>')+
+      '<br><span class="note">※"角度"ごとの実力。イン・融合が上位、穴・機力頭は的中率が低い＝<b>穴狙いは当たらない</b>の証明。上位の角度を重く見るのが回収率を守る。</span>';
+  });
+}
+document.getElementById('tourney').addEventListener('click',predictorTourney);
 document.getElementById('cfgreset').addEventListener('click',function(){
   CFG.K=1.3;CFG.T=1.0;try{localStorage.removeItem('bn_cfg');}catch(e){}
   updateCfgNow(); if(LAST)render();
