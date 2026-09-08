@@ -180,7 +180,12 @@ small.hint{color:var(--mut);font-size:11px}
     <div style="overflow-x:auto"><table class="tri"><thead><tr><th>段</th><th>買い目</th><th>分岐</th><th>実オッズ</th><th>EV</th><th>¥配分</th></tr></thead><tbody id="ftri"></tbody></table></div>
     <div class="note" id="fnote"></div>
     <div class="note" style="margin:12px 0 3px"><b>🎫 3連複</b>（順不同で3艇＝<b class="plus">当たりやすい</b>・配当低め。当てて続けたい時はこっち）</div>
-    <div style="overflow-x:auto"><table class="tri"><thead><tr><th>買い目</th><th>的中率</th><th>分岐</th><th>実オッズ</th><th>判定</th></tr></thead><tbody id="ftri3"></tbody></table></div>
+    <div class="grid2" style="margin:0 0 6px">
+      <label class="mini">点数 <select id="f3pts"><option value="2">2点</option><option value="3" selected>3点</option><option value="4">4点</option><option value="6">6点</option></select></label>
+      <span class="note" style="margin:0" id="f3cov">–</span>
+    </div>
+    <div style="overflow-x:auto"><table class="tri"><thead><tr><th>買い目</th><th>的中率</th><th>累計</th><th>分岐</th><th>実オッズ</th><th>判定</th></tr></thead><tbody id="ftri3"></tbody></table></div>
+    <div class="note" id="f3note"></div>
     <div class="note"><b>💡 オッズは打たなくてOK。</b>賭けサイトの倍率を見て、「分岐」より<b class="plus">高ければ買い（妙味）</b>／<b class="minus">低ければ見送り（過剰人気）</b>。目で見比べるだけ。<br>（実オッズを打ち込めばEV・¥配分・🔥ゴリ押し判定まで自動で出ます＝おまけ）</div>
     <button class="btn ghost" id="mknote" style="margin-top:10px">📝 note / X の下書きを作る（免責つき）</button>
     <div id="noteout" hidden style="margin-top:8px">
@@ -308,8 +313,12 @@ function waterCB(w){
   if(w==='mid')   return [0.52,0.155,0.125,0.11,0.06,0.03];
   return COURSE_BASE.slice();
 }
-// v3 決まり手: 1コース差され率・2〜6コース攻め力(差し/まくり)。手入力km%あれば優先、無ければ推定
+// v3.1 決まり手: 1コース=逃げ/差され、2〜6コース=攻め力を"差し/まくり/まくり差し"に分解。
+// まくり=機力(パワー)駆動・荒れの主因／差し=ST/ハンドル駆動・順当寄り／まくり差し=中間(3-4)。
+// 手入力km%(総攻め率)あれば総量に優先、内訳はコース×機力×STで按分。
 function kimarite(boats){
+  // コース別の決まり手ベース構成（実戦傾向の概算：まくり/差し/まくり差し）
+  var COMP={2:{m:0.28,s:0.62,z:0.10},3:{m:0.44,s:0.30,z:0.26},4:{m:0.64,s:0.10,z:0.26},5:{m:0.40,s:0.22,z:0.38},6:{m:0.46,s:0.20,z:0.34}};
   return boats.map(function(b,i){
     var c=b.course||i+1;
     var stq=clamp((0.21-(b.st||0.18))/0.09,0,1); // ST速い=1
@@ -318,12 +327,17 @@ function kimarite(boats){
       // 差され推定: ST遅い・機力低いほど逃げ崩れやすい ＋ F/L持ちは自重で差されやすい(確定)
       var sas=(b.km>0)?clamp(b.km/100,0,0.7):clamp(0.10+0.42*(1-stq)+0.30*(1-mq),0,0.6);
       if(flPen(b)>0) sas=clamp(sas+(flPen(b)>=0.10?0.16:0.09),0,0.75);
-      return {atk:0, sasare:sas};
+      return {atk:0, sasare:sas, makuri:0, sashi:0, mzashi:0, move:'逃げ', nige:clamp(1-sas,0,1)};
     }
-    // 攻め推定: カド(4)>センター(3)>(5)>(2)の地の利 × 機力 × ST
+    // 攻め総量: カド(4)>センター(3)>(5)>(2)の地の利 × 機力 × ST
     var geo=(c===4?0.30:c===3?0.24:c===5?0.16:c===2?0.14:0.10);
     var atk=(b.km>0)?clamp(b.km/100,0,0.9):clamp(geo+0.34*mq+0.24*stq,0,0.85);
-    return {atk:atk, sasare:0};
+    // 内訳: まくり=機力駆動 / 差し=ST駆動 / まくり差し=両者中間
+    var cp=COMP[c]||COMP[6];
+    var mw=cp.m*(0.5+mq), sw=cp.s*(0.5+stq), zw=cp.z*(0.5+(mq+stq)/2), ws=mw+sw+zw||1;
+    var makuri=atk*mw/ws, sashi=atk*sw/ws, mzashi=atk*zw/ws;
+    var move=(makuri>=sashi&&makuri>=mzashi)?'まくり':(sashi>=mzashi?'差し':'まくり差し');
+    return {atk:atk, sasare:0, makuri:makuri, sashi:sashi, mzashi:mzashi, move:move, nige:0};
   });
 }
 // 段階A: 1着確率(コース支配 + 実測1着率ブレンド + 水面 + 差され割引) / 段階B用のplace重みも返す
@@ -364,7 +378,7 @@ function winProbs(boats,cfg,waterOverride){
   var pw=boats.map(function(b,i){var cc=clamp((b.course||i+1)-1,0,5); return Math.max(0.02,PLACE_CB[cc]*str[i]*(1+0.4*km[i].atk));});
   var sw=pw.reduce(function(a,b){return a+b;},0);
   return {p:p,str:str,w:pw.map(function(x){return x/sw;}),
-          atk:km.map(function(k){return k.atk;}),sasare:km.map(function(k){return k.sasare;})};
+          atk:km.map(function(k){return k.atk;}),sasare:km.map(function(k){return k.sasare;}),kim:km};
 }
 // ===== 予想家の"票"を数値化（各予想家が別々の観点でボートを評価）=====
 function seerVotes(boats){
@@ -404,22 +418,33 @@ function fuseAll(boats){
 // ===== 展開予想（レースストーリー）＝数値から筋書きを言語化 =====
 function raceScenario(){
   if(!LAST)return '';
-  var boats=LAST.boats, P=LAST.fused?LAST.fused.p:LAST.p, atk=LAST.atk||[], sas=LAST.sasare||[], chaos=LAST.sim?LAST.sim.chaos:0.3, jcd=LAST.jcd||0;
+  var boats=LAST.boats, P=LAST.fused?LAST.fused.p:LAST.p, atk=LAST.atk||[], sas=LAST.sasare||[], kim=LAST.kim||[], chaos=LAST.sim?LAST.sim.chaos:0.3, jcd=LAST.jcd||0;
   var ix=boats.map(function(b,i){return i;}), ord=ix.slice().sort(function(a,b){return P[b]-P[a];});
   var nm=function(i){return (i+1)+(boats[i].name||'艇'+(i+1));};
   var cof=function(i){return boats[i].course||i+1;};
+  var mv=function(i){return kim[i]?kim[i].move:'攻め';};
   var c1=-1; for(var i=0;i<boats.length;i++){if(cof(i)===1){c1=i;break;}} if(c1<0)c1=0;
   var attackers=ix.filter(function(i){return cof(i)>=2&&i!==ord[0];}).sort(function(a,b){return (atk[b]||0)-(atk[a]||0);});
   var s='<b>🎬 展開予想：</b>';
-  if(ord[0]===c1) s+=nm(c1)+'の逃げが本線（'+(P[ord[0]]*100).toFixed(0)+'%）。';
-  else s+='1コース'+nm(c1)+'は本命でなく、<b>'+nm(ord[0])+'</b>が中心。';
+  if(ord[0]===c1){
+    var nige=kim[c1]?kim[c1].nige:0.6;
+    s+=nm(c1)+'の<b>逃げ</b>が本線（1着'+(P[ord[0]]*100).toFixed(0)+'%・逃げ残り目安'+(nige*100).toFixed(0)+'%）。';
+  }else s+='1コース'+nm(c1)+'は本命でなく、<b>'+nm(ord[0])+'</b>の'+mv(ord[0])+'が中心。';
   if(c1===ord[0]){
     var risks=[]; if((sas[c1]||0)>=0.35)risks.push('差され率'+((sas[c1])*100).toFixed(0)+'%'); if((boats[c1].motor||0)>0&&(boats[c1].motor||0)<32)risks.push('機力難'); if((boats[c1].st||0)>=0.18)risks.push('ST遅め');
     s+= risks.length?'ただし'+risks.join('・')+'で盤石でない。':'ST・機力とも不安なく堅い。';
   }
-  if(attackers.length){ var a0=attackers[0]; s+='相手筆頭は<b>'+nm(a0)+'</b>（'+cof(a0)+'コース・攻め力'+((atk[a0]||0)*100).toFixed(0)+'%）。'; }
-  if(chaos>=0.34&&attackers.length) s+='荒れれば'+nm(attackers[0])+'のまくり一撃も。';
-  if(chaos<0.24) s+='水面は落ち着き、順当決着の公算。';
+  // 相手筆頭＝攻め最大の艇。決まり手(まくり/差し/まくり差し)を明示し、1号艇への脅威の種類を言い分ける
+  if(attackers.length){
+    var a0=attackers[0], k0=kim[a0]||{};
+    var threat=(k0.move==='まくり')?'外から一気にまくって全部さらう筋':(k0.move==='差し')?'1号艇がターンで浮いた内を差す筋':'外を回して差し込むまくり差しの筋';
+    s+='相手筆頭は<b>'+nm(a0)+'</b>（'+cof(a0)+'コース・<b>'+k0.move+'</b>／攻め力'+((atk[a0]||0)*100).toFixed(0)+'%）＝'+threat+'。';
+    if(attackers.length>1&&(atk[attackers[1]]||0)>=0.42){ var a1=attackers[1]; s+='次点は'+nm(a1)+'の'+mv(a1)+'。'; }
+  }
+  // 荒れ度に応じた決着イメージ
+  if(chaos>=0.40&&attackers.length) s+='荒れ濃厚＝'+nm(attackers[0])+'の'+mv(attackers[0])+'一撃で高配当も。';
+  else if(chaos>=0.30&&attackers.length) s+='やや荒れ＝'+nm(attackers[0])+'の'+mv(attackers[0])+'を1枚保険に。';
+  else if(chaos<0.24) s+='水面は落ち着き、順当決着（インの逃げ/差し本線）の公算。';
   var trait=VENUE_TRAIT[jcd]; if(trait) s+='<br><span class="note">🏟 '+trait+'</span>';
   return s;
 }
@@ -533,7 +558,7 @@ function reasons(b,km){
   else if(b.st>=0.19) r.push('ST'+Number(b.st).toFixed(2)+'＝遅め');
   if(km){
     if(c===1 && km.sasare>=0.32) r.push('差され率'+(km.sasare*100).toFixed(0)+'%'+(b.km>0?'':'(推定)')+'＝逃げ崩れ注意');
-    else if(c>=3 && km.atk>=0.52) r.push('攻め力'+(km.atk*100).toFixed(0)+'%'+(b.km>0?'':'(推定)')+'＝差し/まくりの脅威');
+    else if(c>=2 && km.atk>=0.45 && km.move) r.push('攻め力'+(km.atk*100).toFixed(0)+'%'+(b.km>0?'':'(推定)')+'＝<b>'+km.move+'</b>本線');
   }
   if(b.fl){var fu=(''+b.fl).toUpperCase(); if(/F/.test(fu))r.push(fu+'＝フライング持ちでスタート自重'+(c===1?'（逃げ崩れ注意）':'')); else if(/L/.test(fu))r.push(fu+'＝出遅れ持ち');}
   if(b.kon>0){ if(b.kon<=2.3)r.push('今節平均'+b.kon+'着＝好調'); else if(b.kon>=4.0)r.push('今節平均'+b.kon+'着＝不調'); }
@@ -577,7 +602,7 @@ var LAST=null;
 function render(){
   var boats=readBoats();
   var jcd0=+((document.getElementById('jcd')||{}).value)||0; CUR_VEN=VENUE_IN[jcd0]||1; // 会場イン強度を反映
-  var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p,w:wp.w,str:wp.str,atk:wp.atk,sasare:wp.sasare,jcd:jcd0};
+  var wp=winProbs(boats), p=wp.p; LAST={boats:boats,p:p,w:wp.w,str:wp.str,atk:wp.atk,sasare:wp.sasare,kim:wp.kim,jcd:jcd0};
   LAST.sim=simulateRace(boats,CFG,30000); // 3万回シミュレーション
   LAST.fused=fuseAll(boats); // 数値×シミュ×予想家の融合
   var pr=placeRates(p,wp.w);
@@ -586,7 +611,7 @@ function render(){
   var order=P.map(function(v,i){return i;}).sort(function(a,b){return P[b]-P[a];});
   var ROLE=['◎本命','○対抗','▲単穴','△','△','消'];
   host.innerHTML=order.map(function(i,idx){
-    var b=boats[i], nm=b.name||('艇'+(i+1)), rs=reasons(b,{atk:wp.atk[i],sasare:wp.sasare[i]});
+    var b=boats[i], nm=b.name||('艇'+(i+1)), rs=reasons(b,wp.kim?wp.kim[i]:{atk:wp.atk[i],sasare:wp.sasare[i]});
     return '<div class="pl">'+
       '<div class="row"><span class="wk '+COL[i]+'">'+(i+1)+'</span>'+
       '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b>'+nm+'</b> <span class="tag">'+b.grade+(b.cwin?'★':'')+'</span> <span class="role">'+ROLE[idx]+'</span></span>'+
@@ -676,20 +701,41 @@ function renderFinal(){
     return '<tr data-i="'+i+'"><td class="note" style="text-align:left;white-space:nowrap">'+o.role+'</td><td><b>'+o.combo.map(function(x){return x+1;}).join('-')+'</b></td><td>'+o.be.toFixed(1)+'</td>'+
       '<td><input type="number" class="fodds" step="0.1" placeholder="入力" style="width:56px"></td><td class="fev">–</td><td class="fyen" style="white-space:nowrap">–</td></tr>';
   }).join('');
-  // 🎫 3連複：シミュの3連単頻度を順不同で集計→当たりやすい順に上位表示
+  renderBox();
+  allocFinal();
+}
+var FINBOX=[];
+// 🎫 3連複の点数最適化：シミュ頻度を順不同集計→当たりやすい順に選び、累計的中率(カバー率)を表示
+function renderBox(){
+  if(!LAST)return;
   var sim=LAST.sim, box={};
   if(sim&&sim.comboProb){
     for(var kk in sim.comboProb){ var arr=kk.split('-').map(Number).sort(function(a,b){return a-b;}); var key=arr.join('-'); box[key]=(box[key]||0)+sim.comboProb[kk]; }
   }
-  var boxes=Object.keys(box).map(function(k){return {k:k,p:box[k]};}).sort(function(a,b){return b.p-a.p;}).slice(0,4);
+  var ranked=Object.keys(box).map(function(k){return {k:k,p:box[k]};}).sort(function(a,b){return b.p-a.p;});
+  var npt=+((document.getElementById('f3pts')||{}).value)||3;
+  var boxes=ranked.slice(0,npt);
   FINBOX=boxes;
+  var cum=0;
   document.getElementById('ftri3').innerHTML=boxes.length?boxes.map(function(o,i){
-    return '<tr data-i="'+i+'"><td><b>'+o.k+'</b></td><td>'+(o.p*100).toFixed(1)+'%</td><td>'+(1/o.p).toFixed(1)+'</td>'+
+    cum+=o.p;
+    return '<tr data-i="'+i+'"><td><b>'+o.k+'</b></td><td>'+(o.p*100).toFixed(1)+'%</td><td class="note">'+(cum*100).toFixed(0)+'%</td><td>'+(1/o.p).toFixed(1)+'</td>'+
       '<td><input type="number" class="f3odds" step="0.1" placeholder="入力" style="width:56px"></td><td class="f3jd note" style="text-align:left">分岐↑で買い</td></tr>';
-  }).join(''):'<tr><td colspan="5" class="note">先に計算してください</td></tr>';
-  allocFinal();
+  }).join(''):'<tr><td colspan="6" class="note">先に計算してください</td></tr>';
+  // カバー率＝この点数で「3連複が当たる確率」の目安。¥100均等買いの必要平均配当も出す
+  var cov=boxes.reduce(function(s,o){return s+o.p;},0);
+  var needOdds=cov>0?(npt/cov):0; // 均等買いで±0になる平均配当(1点的中前提の粗い目安)
+  var covEl=document.getElementById('f3cov');
+  if(covEl) covEl.innerHTML=boxes.length?('この<b>'+npt+'点</b>で3連複的中率の目安 <b class="plus">'+(cov*100).toFixed(0)+'%</b>（当たれば平均配当'+needOdds.toFixed(1)+'倍で±0）'):'–';
+  var f3n=document.getElementById('f3note');
+  if(f3n){
+    var tip;
+    if(cov>=0.55) tip='<b class="plus">カバー率'+(cov*100).toFixed(0)+'%＝堅い。</b>3連複は当てて資金を保つ買い方。均等¥100〜で。';
+    else if(cov>=0.40) tip='カバー率'+(cov*100).toFixed(0)+'%＝中程度。点数を増やすと当たるが配当は薄まる（'+needOdds.toFixed(1)+'倍で±0）。';
+    else tip='<b class="minus">カバー率'+(cov*100).toFixed(0)+'%＝手広くしても当たりにくい混戦。</b>3連複でも見送り寄り。';
+    f3n.innerHTML='💡 '+tip+' 実オッズを各行に入れると、分岐（'+'必要倍率'+'）と比べて妙味／過剰を判定します。';
+  }
 }
-var FINBOX=[];
 function allocFinal(){
   if(!FINPTS.length)return;
   var budget=+document.getElementById('fbudget').value||0;
@@ -724,6 +770,7 @@ function allocFinal(){
   if(LAST) renderParade(); // ④のオッズでレン/ケイ/デスクの見立ても更新
 }
 document.getElementById('fpts').addEventListener('change',renderFinal);
+document.getElementById('f3pts').addEventListener('change',function(){ if(LAST)renderBox(); });
 document.getElementById('ftri').addEventListener('input',function(e){ if(e.target.classList.contains('fodds'))allocFinal(); });
 document.getElementById('fbudget').addEventListener('input',allocFinal);
 // 3連複：実オッズ vs 分岐 で妙味/過剰を判定
